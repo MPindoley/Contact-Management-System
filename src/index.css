@@ -1,0 +1,98 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/fraunces";
+@import "tailwindcss";
+
+/*
+  Relationship Hub design language
+  --------------------------------
+  Warm paper ground, near-black ink, one confident evergreen accent ("pine"),
+  warm terracotta for overdue ("clay"), old gold for Tier A. Fraunces carries
+  headlines and big numerals; Inter carries the working surfaces.
+*/
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+
+  --color-paper: #f6f4ef;
+  --color-ink: #211d19;
+  --color-ink-soft: #5c554c;
+
+  --color-pine-50: #f2f7f4;
+  --color-pine-100: #e0ede5;
+  --color-pine-200: #c2dccc;
+  --color-pine-300: #97c2a9;
+  --color-pine-400: #66a282;
+  --color-pine-500: #438362;
+  --color-pine-600: #30684c;
+  --color-pine-700: #28543f;
+  --color-pine-800: #224434;
+  --color-pine-900: #1d392c;
+  --color-pine-950: #0e2018;
+
+  --color-clay-50: #fdf3ef;
+  --color-clay-100: #fae2d8;
+  --color-clay-200: #f4c2b0;
+  --color-clay-300: #ec9b7f;
+  --color-clay-400: #e1714d;
+  --color-clay-500: #d4512a;
+  --color-clay-600: #b8430f;
+  --color-clay-700: #9c3a10;
+  --color-clay-800: #7e3112;
+  --color-clay-900: #672a12;
+  --color-clay-950: #381507;
+
+  --color-gold-50: #fbf7eb;
+  --color-gold-100: #f5ecce;
+  --color-gold-200: #ebd99c;
+  --color-gold-300: #dfc063;
+  --color-gold-400: #d4a83a;
+  --color-gold-500: #c4922a;
+  --color-gold-600: #a87422;
+  --color-gold-700: #86571e;
+  --color-gold-800: #6f481f;
+  --color-gold-900: #5f3d1e;
+  --color-gold-950: #372112;
+
+  --shadow-card: 0 1px 2px rgb(33 29 25 / 0.04), 0 4px 12px -2px rgb(33 29 25 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(33 29 25 / 0.06), 0 12px 28px -8px rgb(33 29 25 / 0.14);
+
+  --animate-rise: rise 0.28s cubic-bezier(0.21, 0.9, 0.35, 1) both;
+  --animate-fade: fade 0.2s ease-out both;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-paper font-sans text-[15px] text-ink;
+    font-feature-settings: "cv05", "cv11";
+  }
+  ::selection {
+    @apply bg-pine-200 text-pine-950;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+    font-variation-settings: "SOFT" 40, "WONK" 0;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-pine-500;
+  }
+}
+
+@utility card {
+  @apply rounded-2xl border border-stone-200/90 bg-white shadow-card;
+}
+
+@utility tnum {
+  font-feature-settings: "tnum";
+}
