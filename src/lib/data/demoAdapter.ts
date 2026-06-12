@@ -178,6 +178,45 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       return snapshot();
     },
 
+    async importClients(inputs: AddClientInput[]) {
+      const s = ensureLoaded();
+      const now = new Date().toISOString();
+      for (const input of inputs) {
+        const client: Client = {
+          id: uid(),
+          householdName: input.householdName.trim(),
+          assignedAdvisor: input.assignedAdvisor,
+          tier: input.tier,
+          active: true,
+          redtailId: input.redtailId?.trim() || null,
+          createdAt: now,
+        };
+        s.snapshot.clients.push(client);
+
+        const seedAdvisor = client.assignedAdvisor === "joint" ? "matt" : client.assignedAdvisor;
+        const seeds: Array<[("meeting" | "call"), string | null]> = [
+          ["meeting", input.lastMeetingDate],
+          ["call", input.lastCallDate],
+        ];
+        for (const [type, date] of seeds) {
+          if (!date) continue;
+          s.snapshot.contactEvents.push({
+            id: uid(),
+            clientId: client.id,
+            advisor: seedAdvisor,
+            type,
+            eventDate: date,
+            durationMinutes: null,
+            notes: "Imported from CSV.",
+            createdAt: now,
+          });
+        }
+        recomputeClient(client.id);
+      }
+      rebuild(todayISO());
+      return snapshot();
+    },
+
     async updateClient(clientId: string, patch: UpdateClientInput) {
       const s = ensureLoaded();
       const client = s.snapshot.clients.find((c) => c.id === clientId);

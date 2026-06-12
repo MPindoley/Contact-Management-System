@@ -54,10 +54,13 @@ export function Clients() {
             schedule.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setAdding(true)}>
-          <PlusIcon className="size-4" />
-          Add household
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => navigate("/clients/import")}>Import CSV</Button>
+          <Button variant="primary" onClick={() => setAdding(true)}>
+            <PlusIcon className="size-4" />
+            Add household
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-2.5">

@@ -20,6 +20,8 @@ export interface DataAdapter {
   load(): Promise<DataSnapshot>;
   logContact(input: LogContactInput): Promise<DataSnapshot>;
   addClient(input: AddClientInput): Promise<DataSnapshot>;
+  /** Phase 2: bulk import from the CSV wizard. */
+  importClients(inputs: AddClientInput[]): Promise<DataSnapshot>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
   /** Re-run the nightly rebuild on demand (the "6am job, now" button). */

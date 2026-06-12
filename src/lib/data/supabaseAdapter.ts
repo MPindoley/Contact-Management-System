@@ -253,6 +253,53 @@ export function createSupabaseAdapter(): DataAdapter {
       return fetchSnapshot();
     },
 
+    async importClients(inputs: AddClientInput[]) {
+      // Chunked bulk inserts; the database triggers compute due dates and
+      // tasks per row, so the queue is live the moment this resolves.
+      const CHUNK = 100;
+      for (let i = 0; i < inputs.length; i += CHUNK) {
+        const chunk = inputs.slice(i, i + CHUNK);
+        const inserted = await db
+          .from("clients")
+          .insert(
+            chunk.map((c) => ({
+              household_name: c.householdName.trim(),
+              assigned_advisor: c.assignedAdvisor,
+              tier: c.tier,
+              redtail_id: c.redtailId?.trim() || null,
+            })),
+          )
+          .select("id");
+        const ids = unwrap<Array<{ id: string }>>(inserted, "Importing clients");
+
+        const events = chunk.flatMap((c, j) => {
+          const seedAdvisor = c.assignedAdvisor === "joint" ? "matt" : c.assignedAdvisor;
+          return [
+            c.lastMeetingDate && {
+              client_id: ids[j].id,
+              advisor: seedAdvisor,
+              type: "meeting" as const,
+              event_date: c.lastMeetingDate,
+              notes: "Imported from CSV.",
+            },
+            c.lastCallDate && {
+              client_id: ids[j].id,
+              advisor: seedAdvisor,
+              type: "call" as const,
+              event_date: c.lastCallDate,
+              notes: "Imported from CSV.",
+            },
+          ].filter(Boolean) as Array<Record<string, unknown>>;
+        });
+
+        if (events.length > 0) {
+          const { error } = await db.from("contact_events").insert(events);
+          if (error) throw new Error(`Importing contact history: ${error.message}`);
+        }
+      }
+      return fetchSnapshot();
+    },
+
     async updateClient(clientId: string, patch: UpdateClientInput) {
       const row: Record<string, unknown> = {};
       if (patch.householdName !== undefined) row.household_name = patch.householdName.trim();

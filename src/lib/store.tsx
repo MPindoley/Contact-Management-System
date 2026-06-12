@@ -51,6 +51,7 @@ interface AppContextValue {
   refresh(): Promise<void>;
   logContact(input: LogContactInput): Promise<DueDate[]>;
   addClient(input: AddClientInput): Promise<Client | null>;
+  importClients(inputs: AddClientInput[]): Promise<void>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
   rebuildQueue(): Promise<void>;
@@ -269,6 +270,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run, data],
   );
 
+  const importClients = useCallback(
+    (inputs: AddClientInput[]) => run(() => adapter.importClients(inputs)),
+    [adapter, run],
+  );
+
   const updateClient = useCallback(
     (clientId: string, patch: UpdateClientInput) =>
       run(() => adapter.updateClient(clientId, patch)),
@@ -303,6 +309,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refresh,
       logContact,
       addClient,
+      importClients,
       updateClient,
       updateServiceModel,
       rebuildQueue,
@@ -311,7 +318,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       mode, authReady, currentUser, signInDemo, signInSupabase, signUpSupabase, signOut,
       data, loading, busy, error, today, refresh,
-      logContact, addClient, updateClient, updateServiceModel, rebuildQueue, resetDemo,
+      logContact, addClient, importClients, updateClient, updateServiceModel, rebuildQueue, resetDemo,
     ],
   );
 
