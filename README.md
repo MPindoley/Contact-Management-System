@@ -141,9 +141,10 @@ their book + joint and gives the assistant the firm-wide view.
 
 ## Roadmap
 
-- **Phase 2** — CSV import from Redtail: column mapping, revenue-threshold
-  tier assignment, batch last-contact dates. (The add-household form already
-  seeds clocks from last-touch dates; import generalizes it.)
+- **Phase 2 — done.** CSV import from Redtail: Clients → *Import CSV*. Column
+  auto-mapping, revenue-cutoff tier assignment with live counts, advisor
+  value matching, duplicate detection, and last-contact dates that seed the
+  service clocks on the spot.
 - **Phase 3** — daily email digest per advisor; Outlook calendar pull.
 - **Phase 4** — live Redtail sync once API access lands (`redtail_id` is
   already on every client).
