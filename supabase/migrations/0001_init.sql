@@ -389,7 +389,7 @@ insert into service_models (tier, meeting_interval_days, call_interval_days) val
 --   update users set email = 'matt@yourfirm.com' where advisor_key = 'matt';
 insert into users (name, email, role, advisor_key) values
   ('Matt',      null, 'advisor',   'matt'),
-  ('Advisor B', null, 'advisor',   'advisor_b'),
+  ('Beau',      null, 'advisor',   'advisor_b'),
   ('Assistant', null, 'assistant', null);
 
 -- ============================================================================

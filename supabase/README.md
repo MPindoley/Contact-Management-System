@@ -71,6 +71,45 @@ re-ages overdue items each morning. Two options:
   schedule in Dashboard → Edge Functions. Source:
   [`functions/rebuild-tasks/index.ts`](functions/rebuild-tasks/index.ts).
 
+## 6. Daily email digest (Phase 3)
+
+Every advisor gets their personal action queue by email each morning; the
+assistant gets the firm-wide version. Quiet days send nothing.
+
+1. **Create a free [Resend](https://resend.com) account** and copy an API
+   key. (To send from your own domain — `hub@yourfirm.com` — verify the
+   domain under Resend → Domains; until then the default test sender works
+   and delivers to your own inbox.)
+2. **Deploy the function** with the Supabase CLI:
+
+   ```bash
+   supabase functions deploy daily-digest
+   ```
+
+3. **Set its secrets** in Dashboard → Edge Functions → Secrets (or CLI):
+
+   ```bash
+   supabase secrets set RESEND_API_KEY=re_xxxxxxxx
+   supabase secrets set APP_URL=https://your-site.vercel.app
+   # optional, once your domain is verified with Resend:
+   supabase secrets set DIGEST_FROM="Relationship Hub <hub@yourfirm.com>"
+   ```
+
+4. **Schedule it** for ~6:15am local (after the 6:00 rebuild), cron in UTC —
+   e.g. 11:15 for 6:15am Central. Dashboard → Edge Functions →
+   daily-digest → Schedules, cron: `15 11 * * *`.
+5. **Test it now** without waiting for morning:
+
+   ```bash
+   curl -X POST https://<ref>.supabase.co/functions/v1/daily-digest \
+     -H "Authorization: Bearer <service-role-key>"
+   ```
+
+   The JSON response reports who was emailed and who was skipped.
+
+Digest recipients are the rows in `users` that have an email — the same
+emails that link sign-ins, so this works with no extra setup.
+
 ## How the engine works in the database
 
 - Logging a contact (insert into `contact_events`) fires a trigger that:
