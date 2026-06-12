@@ -30,6 +30,19 @@ update users set email = 'assistant@yourfirm.com' where role = 'assistant';
 Then invite the three of them from **Authentication → Users → Invite user**
 (or let them use the app's sign-up form with those emails).
 
+### Auth URLs — do this or email links will point at localhost
+
+In **Authentication → URL Configuration**:
+
+- set **Site URL** to where the app actually lives (your Vercel URL, e.g.
+  `https://relationship-hub.vercel.app`) — the default is
+  `http://localhost:3000`, which only works on a developer's machine;
+- add the same URL to **Redirect URLs**.
+
+For a three-person internal tool you can skip confirmation emails entirely:
+**Authentication → Sign In / Providers → Email → turn off "Confirm email"** —
+accounts then work the moment they're created.
+
 ## 4. Point the app at the project
 
 In the repo root:
