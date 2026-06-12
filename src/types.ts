@@ -102,7 +102,7 @@ export interface UpdateClientInput {
 
 export const ADVISOR_LABELS: Record<AdvisorAssignment, string> = {
   matt: "Matt",
-  advisor_b: "Advisor B",
+  advisor_b: "Beau",
   joint: "Joint",
 };
 

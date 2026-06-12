@@ -69,7 +69,7 @@ export function ImportClients() {
         const lower = v.toLowerCase();
         if (/matt/.test(lower)) auto[lower] = "matt";
         else if (/joint|both|shared/.test(lower)) auto[lower] = "joint";
-        else if (/advisor ?b|b$/.test(lower)) auto[lower] = "advisor_b";
+        else if (/beau|advisor ?b|b$/.test(lower)) auto[lower] = "advisor_b";
       }
       setAdvisorValueMap(auto);
     } catch {

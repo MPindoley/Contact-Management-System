@@ -9,7 +9,7 @@ import { computeClientDueDates, rebuildAllTasks } from "../../engine/serviceEngi
 
 export const DEMO_USERS: User[] = [
   { id: "user_matt", name: "Matt", email: "matt@demo.firm", role: "advisor", advisorKey: "matt" },
-  { id: "user_advisor_b", name: "Advisor B", email: "advisorb@demo.firm", role: "advisor", advisorKey: "advisor_b" },
+  { id: "user_advisor_b", name: "Beau", email: "beau@demo.firm", role: "advisor", advisorKey: "advisor_b" },
   { id: "user_assistant", name: "Assistant", email: "assistant@demo.firm", role: "assistant", advisorKey: null },
 ];
 
