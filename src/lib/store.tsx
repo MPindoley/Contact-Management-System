@@ -95,10 +95,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAuthReady(true);
         return;
       }
+      // ilike = case-insensitive match, so 'Matt@Firm.com' on the team list
+      // still links a signup normalized to lowercase.
       const { data: rows } = await db
         .from("users")
         .select("id, name, email, role, advisor_key")
-        .or(`auth_user_id.eq.${authUserId}${email ? `,email.eq.${email}` : ""}`)
+        .or(`auth_user_id.eq.${authUserId}${email ? `,email.ilike.${email}` : ""}`)
         .limit(1);
       const row = rows?.[0];
       setCurrentUser(
@@ -107,8 +109,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : null,
       );
       if (!row) {
+        // Mid password-recovery there may legitimately be no linked profile
+        // yet — don't kill the session before they can set a password.
+        if (window.location.pathname === "/reset-password") {
+          setAuthReady(true);
+          return;
+        }
         setError(
-          "Signed in, but this email isn't linked to a firm profile yet. Set your email on the users table (see supabase/README.md).",
+          `Signed in as ${email ?? "this account"}, but that email isn't on the team list yet. ` +
+            "Add it to the users table (supabase/README.md, step 3), then sign in again.",
         );
         await db.auth.signOut();
       }

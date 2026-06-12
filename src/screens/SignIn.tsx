@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { DEMO_USERS } from "../lib/data/demoSeed";
+import { supabaseConfigWarning } from "../lib/data/supabaseAdapter";
 import { Button, Field, Input, Spinner } from "../components/ui";
 import { LogoMark } from "../components/icons";
 
@@ -29,6 +30,13 @@ export function SignIn() {
             morning: <em className="font-display">who needs attention today?</em>
           </p>
         </div>
+
+        {mode === "supabase" && supabaseConfigWarning && (
+          <div className="animate-rise mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
+            <p className="font-semibold">Configuration problem</p>
+            <p className="mt-1">{supabaseConfigWarning}</p>
+          </div>
+        )}
 
         {mode === "demo" ? <DemoSignIn /> : <SupabaseSignIn />}
 
@@ -80,7 +88,7 @@ function DemoSignIn() {
 }
 
 function SupabaseSignIn() {
-  const { signInSupabase, signUpSupabase } = useApp();
+  const { signInSupabase, signUpSupabase, error: appError } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [creating, setCreating] = useState(false);
@@ -102,6 +110,21 @@ function SupabaseSignIn() {
       setNotice("Account created. If email confirmation is on, confirm it and sign in.");
       setCreating(false);
     }
+  }
+
+  async function forgotPassword() {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError("Type your email above first, then click “Forgot password” again.");
+      return;
+    }
+    const { getSupabase } = await import("../lib/data/supabaseAdapter");
+    const { error: err } = await getSupabase().auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (err) setError(err.message);
+    else setNotice("Recovery email sent — open the link in it to choose a new password.");
   }
 
   return (
@@ -134,19 +157,31 @@ function SupabaseSignIn() {
       </Field>
 
       {error && <p className="rounded-lg bg-clay-50 px-3 py-2 text-sm text-clay-800">{error}</p>}
+      {!error && appError && (
+        <p className="rounded-lg bg-clay-50 px-3 py-2 text-sm leading-relaxed text-clay-800">{appError}</p>
+      )}
       {notice && <p className="rounded-lg bg-pine-50 px-3 py-2 text-sm text-pine-800">{notice}</p>}
 
       <Button variant="primary" type="submit" disabled={pending} className="w-full">
         {pending && <Spinner className="size-3.5 border-white/40 border-t-white" />}
         {creating ? "Create account" : "Sign in"}
       </Button>
-      <button
-        type="button"
-        className="w-full cursor-pointer text-center text-xs text-ink-soft underline-offset-2 hover:underline"
-        onClick={() => setCreating((v) => !v)}
-      >
-        {creating ? "Have an account already? Sign in" : "First time here? Create your account"}
-      </button>
+      <div className="flex items-center justify-between text-xs">
+        <button
+          type="button"
+          className="cursor-pointer text-ink-soft underline-offset-2 hover:underline"
+          onClick={() => setCreating((v) => !v)}
+        >
+          {creating ? "Have an account? Sign in" : "First time here? Create account"}
+        </button>
+        <button
+          type="button"
+          className="cursor-pointer text-ink-soft underline-offset-2 hover:underline"
+          onClick={() => void forgotPassword()}
+        >
+          Forgot password?
+        </button>
+      </div>
     </form>
   );
 }

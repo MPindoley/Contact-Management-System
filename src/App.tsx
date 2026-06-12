@@ -3,6 +3,7 @@ import { AppProvider, useApp } from "./lib/store";
 import { ToastProvider } from "./lib/toast";
 import { Layout } from "./components/Layout";
 import { SignIn } from "./screens/SignIn";
+import { ResetPassword } from "./screens/ResetPassword";
 import { Dashboard } from "./screens/Dashboard";
 import { ActionQueue } from "./screens/ActionQueue";
 import { Clients } from "./screens/Clients";
@@ -50,6 +51,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/signin" element={<SignIn />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route element={<RequireAuth />}>
               <Route element={<Layout />}>
                 <Route index element={<Dashboard />} />

@@ -27,10 +27,35 @@ import type {
 } from "../../types";
 import type { DataAdapter } from "./adapter";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+
+// Tolerate the most common paste mistake (trailing slash). The value must be
+// the project's base API URL: https://YOUR-REF.supabase.co
+const url = rawUrl?.trim().replace(/\/+$/, "");
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
+
+/**
+ * A human-readable diagnosis when VITE_SUPABASE_URL is present but wrong —
+ * e.g. the dashboard page URL was pasted instead of the project API URL.
+ * Shown on the sign-in screen before anyone hits a cryptic gateway error.
+ */
+export const supabaseConfigWarning: string | null = (() => {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "supabase.com" || parsed.hostname === "www.supabase.com") {
+      return "VITE_SUPABASE_URL points at the Supabase website, not your project. Use the Project URL from Project Settings → API — it looks like https://abcd1234.supabase.co — then redeploy.";
+    }
+    if (parsed.pathname !== "/") {
+      return `VITE_SUPABASE_URL must be just the project URL with nothing after the domain (got a path: ${parsed.pathname}). Copy the Project URL from Project Settings → API, then redeploy.`;
+    }
+  } catch {
+    return "VITE_SUPABASE_URL is not a valid URL. Copy the Project URL from Project Settings → API (https://abcd1234.supabase.co), then redeploy.";
+  }
+  return null;
+})();
 
 let client: SupabaseClient | null = null;
 
