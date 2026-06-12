@@ -95,14 +95,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAuthReady(true);
         return;
       }
-      // ilike = case-insensitive match, so 'Matt@Firm.com' on the team list
-      // still links a signup normalized to lowercase.
-      const { data: rows } = await db
-        .from("users")
-        .select("id, name, email, role, advisor_key")
-        .or(`auth_user_id.eq.${authUserId}${email ? `,email.ilike.${email}` : ""}`)
-        .limit(1);
-      const row = rows?.[0];
+      const columns = "id, name, email, role, advisor_key";
+
+      // Two simple lookups instead of one fragile or() filter: first by the
+      // stamped auth id, then case-insensitively by email.
+      let row = (
+        await db.from("users").select(columns).eq("auth_user_id", authUserId).limit(1)
+      ).data?.[0];
+
+      if (!row && email) {
+        row = (
+          await db.from("users").select(columns).ilike("email", email.trim()).limit(1)
+        ).data?.[0];
+        if (row) {
+          // Self-heal: stamp the auth id so every future sign-in matches
+          // directly. Ignore failure (older databases may not allow it).
+          await db.from("users").update({ auth_user_id: authUserId }).eq("id", row.id);
+        }
+      }
+
       setCurrentUser(
         row
           ? { id: row.id, name: row.name, email: row.email, role: row.role, advisorKey: row.advisor_key }

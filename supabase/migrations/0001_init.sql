@@ -309,7 +309,7 @@ language plpgsql security definer set search_path = public as $$
 begin
   update public.users
     set auth_user_id = new.id
-    where lower(email) = lower(new.email)
+    where lower(trim(email)) = lower(trim(new.email))
       and auth_user_id is null;
   return new;
 end $$;
@@ -317,6 +317,28 @@ end $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_auth_user();
+
+-- ...and the reverse direction: when an email is put on the team list,
+-- normalize it (no stray spaces or capitals) and link an existing signup.
+-- Step 3 of the README then works in either order.
+create or replace function handle_users_email_set() returns trigger
+language plpgsql security definer set search_path = public, auth as $$
+begin
+  if new.email is not null then
+    new.email := lower(trim(new.email));
+    if new.auth_user_id is null then
+      select u.id into new.auth_user_id
+      from auth.users u
+      where lower(trim(u.email)) = new.email
+      limit 1;
+    end if;
+  end if;
+  return new;
+end $$;
+
+create trigger users_email_link
+  before insert or update of email on users
+  for each row execute function handle_users_email_set();
 
 -- ============================================================================
 -- Row level security
@@ -335,6 +357,7 @@ alter table due_dates      enable row level security;
 alter table tasks          enable row level security;
 
 create policy "authenticated read users"   on users          for select to authenticated using (true);
+create policy "authenticated update users" on users          for update to authenticated using (true) with check (true);
 create policy "authenticated all clients"  on clients        for all    to authenticated using (true) with check (true);
 create policy "authenticated all models"   on service_models for all    to authenticated using (true) with check (true);
 create policy "authenticated all events"   on contact_events for all    to authenticated using (true) with check (true);

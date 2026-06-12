@@ -159,5 +159,18 @@ begin
   assert u.auth_user_id = '22222222-2222-2222-2222-222222222222', 'auth user linked by email';
 end $$;
 
+-- Reverse order: the signup exists first and the email is set afterwards,
+-- with messy casing and stray whitespace — normalized and linked anyway.
+insert into auth.users (id, email) values ('33333333-3333-3333-3333-333333333333', 'b@test.firm');
+update users set email = '  B@Test.Firm ' where advisor_key = 'advisor_b';
+
+do $$
+declare u record;
+begin
+  select * into strict u from users where advisor_key = 'advisor_b';
+  assert u.email = 'b@test.firm', 'email normalized, got [' || coalesce(u.email, '<null>') || ']';
+  assert u.auth_user_id = '33333333-3333-3333-3333-333333333333', 'linked when email set after signup';
+end $$;
+
 select 'ALL_SQL_ASSERTIONS_PASSED' as result;
 SQL
