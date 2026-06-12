@@ -145,6 +145,10 @@ their book + joint and gives the assistant the firm-wide view.
   auto-mapping, revenue-cutoff tier assignment with live counts, advisor
   value matching, duplicate detection, and last-contact dates that seed the
   service clocks on the spot.
-- **Phase 3** — daily email digest per advisor; Outlook calendar pull.
+- **Phase 3 — digest done.** Daily morning email per advisor with their
+  personal queue (assistant gets the firm view); quiet days send nothing.
+  Setup in [`supabase/README.md`](supabase/README.md) § 6. Outlook calendar
+  pull remains optional/deferred — it needs a Microsoft Azure app
+  registration, and logging a touch is already a 10-second modal.
 - **Phase 4** — live Redtail sync once API access lands (`redtail_id` is
   already on every client).
