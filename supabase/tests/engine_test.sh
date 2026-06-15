@@ -134,6 +134,68 @@ begin
   assert d.due_date = current_date - 42 + 45, 'delete falls back to prior latest, got ' || d.due_date;
 end $$;
 
+-- Snooze suppresses a touch from the queue until the date passes.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('44444444-4444-4444-4444-444444444444', 'Snooze Household', 'matt', 'A');
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('44444444-4444-4444-4444-444444444444', 'matt', 'call', current_date - 40);
+
+do $$
+declare n int;
+begin
+  select count(*) into n from tasks
+    where client_id = '44444444-4444-4444-4444-444444444444' and status = 'open';
+  assert n = 1, 'overdue call task present before snooze';
+end $$;
+
+select snooze_touch('44444444-4444-4444-4444-444444444444', 'call', current_date + 5);
+
+do $$
+declare n int;
+begin
+  select count(*) into n from tasks
+    where client_id = '44444444-4444-4444-4444-444444444444' and status = 'open';
+  assert n = 0, 'snoozed task suppressed from the queue';
+end $$;
+
+-- It returns once the snooze lapses (simulated via a future rebuild).
+select rebuild_tasks(current_date + 5);
+
+do $$
+declare n int;
+begin
+  select count(*) into n from tasks
+    where client_id = '44444444-4444-4444-4444-444444444444' and status = 'open';
+  assert n = 1, 'snoozed task returns after the snooze date';
+end $$;
+
+-- Logging a real contact clears any snooze.
+update due_dates set snoozed_until = current_date + 30
+  where client_id = '44444444-4444-4444-4444-444444444444' and type = 'call';
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('44444444-4444-4444-4444-444444444444', 'matt', 'call', current_date);
+
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = '44444444-4444-4444-4444-444444444444' and type = 'call';
+  assert d.snoozed_until is null, 'fresh contact clears the snooze';
+end $$;
+
+-- Editing a contact's date reflows the due date (fix a mis-logged touch).
+update contact_events set event_date = current_date - 10
+  where client_id = '44444444-4444-4444-4444-444444444444'
+    and type = 'call' and event_date = current_date;
+
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = '44444444-4444-4444-4444-444444444444' and type = 'call';
+  assert d.due_date = current_date - 10 + 30, 'edited contact reflows due date, got ' || d.due_date;
+end $$;
+
 -- Deactivation clears open tasks; rebuild_tasks() is idempotent.
 update clients set active = false where id = '11111111-1111-1111-1111-111111111111';
 

@@ -110,6 +110,41 @@ assistant gets the firm-wide version. Quiet days send nothing.
 Digest recipients are the rows in `users` that have an email — the same
 emails that link sign-ins, so this works with no extra setup.
 
+## 7. Live Redtail sync (Phase 4)
+
+Replaces the one-time CSV import with a nightly reconcile: new clients added
+in Redtail appear automatically, renames propagate, and households removed
+from Redtail are deactivated. **Tier and advisor are never touched** — those
+decisions stay in Relationship Hub.
+
+1. **Get API access from Redtail** — open a ticket with Redtail support
+   asking for a CRM API key for your database. This is the only blocking
+   step and can take a little while; everything below is ready when it lands.
+2. **Deploy** the function: `supabase functions deploy redtail-sync`
+   (or paste `supabase/functions/redtail-sync/` into the dashboard editor).
+3. **Set secrets**: `REDTAIL_API_KEY`, `REDTAIL_USERNAME`,
+   `REDTAIL_PASSWORD`. Optional: `REDTAIL_STATUS_FILTER=client` to skip
+   prospects, `SYNC_DEFAULT_TIER` / `SYNC_DEFAULT_ADVISOR` for how new
+   households arrive (defaults: Tier C, Matt), and `REDTAIL_BASE_URL` if
+   Redtail gives you a different endpoint.
+4. **Dry-run it** (the default — it writes nothing until you say so):
+
+   ```bash
+   curl -X POST https://<ref>.supabase.co/functions/v1/redtail-sync \
+     -H "Authorization: Bearer <service-role-key>"
+   ```
+
+   The report shows exactly what would happen: creates, renames, re-links
+   (existing households matched by name get their Redtail id stamped), and
+   deactivations — with samples. A partial fetch can never mass-deactivate
+   the book; the planner refuses and warns instead.
+5. **Flip it on**: set `REDTAIL_SYNC_APPLY=true`, run once more, check the
+   report, then schedule it nightly (Cron → Edge Function, e.g. `30 10 * * *`).
+
+New households arrive clockless (no invented contact history): they surface
+on the Clients screen for triage — set the right tier, log the first touch,
+and the engine takes over.
+
 ## How the engine works in the database
 
 - Logging a contact (insert into `contact_events`) fires a trigger that:

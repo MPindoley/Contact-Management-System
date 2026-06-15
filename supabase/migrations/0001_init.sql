@@ -91,6 +91,8 @@ create table due_dates (
   type                   touch_type not null,
   due_date               date not null,
   computed_from_event_id uuid references contact_events (id) on delete set null,
+  -- Workflow overlay: suppress this touch from the queue until this date.
+  snoozed_until          date,
   updated_at             timestamptz not null default now(),
   unique (client_id, type)
 );
@@ -167,6 +169,7 @@ begin
   on conflict (client_id, type) do update
     set due_date               = excluded.due_date,
         computed_from_event_id = excluded.computed_from_event_id,
+        snoozed_until          = null,  -- a fresh contact clears any snooze
         updated_at             = now();
 
   -- Drop due dates that no longer have a source event (e.g. event deleted).
@@ -194,7 +197,8 @@ begin
   join clients c on c.id = d.client_id
   where d.client_id = p_client
     and c.active
-    and d.due_date <= p_today + fn_task_horizon();
+    and d.due_date <= p_today + fn_task_horizon()
+    and (d.snoozed_until is null or d.snoozed_until <= p_today);
 end $$;
 
 -- Rebuild the whole firm's queue. Scheduled nightly at 6am; also callable
@@ -211,7 +215,18 @@ begin
   from due_dates d
   join clients c on c.id = d.client_id
   where c.active
-    and d.due_date <= p_today + fn_task_horizon();
+    and d.due_date <= p_today + fn_task_horizon()
+    and (d.snoozed_until is null or d.snoozed_until <= p_today);
+end $$;
+
+-- Snooze (or, with null, un-snooze) a touch: keep it off the queue until the
+-- given date. Cleared automatically the next time a real contact is logged.
+create or replace function snooze_touch(p_client uuid, p_type touch_type, p_until date) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update due_dates set snoozed_until = p_until, updated_at = now()
+    where client_id = p_client and type = p_type;
+  perform fn_rebuild_client_tasks(p_client);
 end $$;
 
 -- Recompute everything (used after service model edits).
