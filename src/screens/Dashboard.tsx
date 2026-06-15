@@ -13,6 +13,7 @@ import { clientInScope, scopeFor, type Client, type Task } from "../types";
 import { addDays, formatLong, formatShort, timeOfDayGreeting } from "../lib/dates";
 import { AdvisorChip, DuePhrase, TierBadge } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
+import { SnoozeButton } from "../components/SnoozeButton";
 import { Segmented } from "../components/ui";
 import {
   AlertIcon,
@@ -243,13 +244,16 @@ function TaskCard({ task, client, today }: { task: Task; client: Client; today: 
             <DuePhrase dueDate={task.dueDate} today={today} />
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => open(client.id)}
-          className="shrink-0 cursor-pointer rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm transition-all hover:border-pine-600 hover:bg-pine-700 hover:text-white focus-visible:opacity-100 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-        >
-          Log
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <SnoozeButton clientId={client.id} type={task.type} householdName={client.householdName} />
+          <button
+            type="button"
+            onClick={() => open(client.id)}
+            className="cursor-pointer rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm transition-colors hover:border-pine-600 hover:bg-pine-700 hover:text-white"
+          >
+            Log
+          </button>
+        </div>
       </div>
     </div>
   );

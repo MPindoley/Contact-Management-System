@@ -73,6 +73,8 @@ export function computeClientDueDates(
         type,
         dueDate: nextDueDate(latest.eventDate, type, model),
         computedFromEventId: latest.id,
+        // A fresh contact resets the clock, so any prior snooze is cleared.
+        snoozedUntil: null,
         updatedAt: nowISO,
       });
     }
@@ -92,7 +94,13 @@ export function taskPriority(dueDate: string, today: string): Priority {
 export function buildClientTasks(client: Client, dueDates: DueDate[], today: string): Task[] {
   if (!client.active) return [];
   return dueDates
-    .filter((d) => d.clientId === client.id && d.dueDate <= addDays(today, TASK_HORIZON_DAYS))
+    .filter(
+      (d) =>
+        d.clientId === client.id &&
+        d.dueDate <= addDays(today, TASK_HORIZON_DAYS) &&
+        // Snoozed touches drop off the queue until the snooze date passes.
+        (d.snoozedUntil === null || d.snoozedUntil <= today),
+    )
     .map((d) => ({
       id: uid(),
       clientId: client.id,

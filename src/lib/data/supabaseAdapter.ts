@@ -23,6 +23,7 @@ import type {
   Tier,
   TouchType,
   UpdateClientInput,
+  UpdateContactInput,
   User,
 } from "../../types";
 import type { DataAdapter } from "./adapter";
@@ -109,6 +110,7 @@ interface DueDateRow {
   type: TouchType;
   due_date: string;
   computed_from_event_id: string | null;
+  snoozed_until: string | null;
   updated_at: string;
 }
 interface TaskRow {
@@ -159,6 +161,7 @@ const mapDueDate = (r: DueDateRow): DueDate => ({
   type: r.type,
   dueDate: r.due_date,
   computedFromEventId: r.computed_from_event_id,
+  snoozedUntil: r.snoozed_until,
   updatedAt: r.updated_at,
 });
 const mapTask = (r: TaskRow): Task => ({
@@ -297,6 +300,35 @@ export function createSupabaseAdapter(): DataAdapter {
           if (error) throw new Error(`Importing contact history: ${error.message}`);
         }
       }
+      return fetchSnapshot();
+    },
+
+    async updateContactEvent(eventId: string, patch: UpdateContactInput) {
+      const row: Record<string, unknown> = {};
+      if (patch.advisor !== undefined) row.advisor = patch.advisor;
+      if (patch.type !== undefined) row.type = patch.type;
+      if (patch.eventDate !== undefined) row.event_date = patch.eventDate;
+      if (patch.durationMinutes !== undefined) row.duration_minutes = patch.durationMinutes;
+      if (patch.notes !== undefined) row.notes = patch.notes?.trim() || null;
+
+      const { error } = await db.from("contact_events").update(row).eq("id", eventId);
+      if (error) throw new Error(`Updating contact: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async deleteContactEvent(eventId: string) {
+      const { error } = await db.from("contact_events").delete().eq("id", eventId);
+      if (error) throw new Error(`Deleting contact: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async snoozeTouch(clientId: string, type: TouchType, untilDate: string | null) {
+      const { error } = await db.rpc("snooze_touch", {
+        p_client: clientId,
+        p_type: type,
+        p_until: untilDate,
+      });
+      if (error) throw new Error(`Snoozing: ${error.message}`);
       return fetchSnapshot();
     },
 

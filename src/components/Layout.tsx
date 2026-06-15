@@ -129,10 +129,10 @@ export function Layout() {
 
   return (
     <LogContactProvider>
-      {busy && <div className="fixed inset-x-0 top-0 z-50 h-0.5 animate-pulse bg-pine-500" />}
+      {busy && <div className="no-print fixed inset-x-0 top-0 z-50 h-0.5 animate-pulse bg-pine-500" />}
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-5 bg-ink py-5 md:flex">
+      <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-5 bg-ink py-5 md:flex">
         <Brand />
         <div className="px-3">
           <LogContactButton />
@@ -149,7 +149,7 @@ export function Layout() {
       </aside>
 
       {/* Mobile header */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-ink px-4 py-3 md:hidden">
+      <header className="no-print sticky top-0 z-30 border-b border-white/10 bg-ink px-4 py-3 md:hidden">
         <div className="flex items-center justify-between gap-3">
           <Brand />
           <LogContactButton compact />

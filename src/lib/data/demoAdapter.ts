@@ -10,7 +10,9 @@ import type {
   DataSnapshot,
   LogContactInput,
   ServiceModel,
+  TouchType,
   UpdateClientInput,
+  UpdateContactInput,
 } from "../../types";
 import type { DataAdapter } from "./adapter";
 import { todayISO } from "../dates";
@@ -214,6 +216,43 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         recomputeClient(client.id);
       }
       rebuild(todayISO());
+      return snapshot();
+    },
+
+    async updateContactEvent(eventId: string, patch: UpdateContactInput) {
+      const s = ensureLoaded();
+      const event = s.snapshot.contactEvents.find((e) => e.id === eventId);
+      if (event) {
+        if (patch.advisor !== undefined) event.advisor = patch.advisor;
+        if (patch.type !== undefined) event.type = patch.type;
+        if (patch.eventDate !== undefined) event.eventDate = patch.eventDate;
+        if (patch.durationMinutes !== undefined) event.durationMinutes = patch.durationMinutes;
+        if (patch.notes !== undefined) event.notes = patch.notes?.trim() || null;
+        recomputeClient(event.clientId);
+        rebuild(todayISO());
+      }
+      return snapshot();
+    },
+
+    async deleteContactEvent(eventId: string) {
+      const s = ensureLoaded();
+      const event = s.snapshot.contactEvents.find((e) => e.id === eventId);
+      if (event) {
+        const clientId = event.clientId;
+        s.snapshot.contactEvents = s.snapshot.contactEvents.filter((e) => e.id !== eventId);
+        recomputeClient(clientId);
+        rebuild(todayISO());
+      }
+      return snapshot();
+    },
+
+    async snoozeTouch(clientId: string, type: TouchType, untilDate: string | null) {
+      const s = ensureLoaded();
+      const due = s.snapshot.dueDates.find((d) => d.clientId === clientId && d.type === type);
+      if (due) {
+        due.snoozedUntil = untilDate;
+        rebuild(todayISO());
+      }
       return snapshot();
     },
 

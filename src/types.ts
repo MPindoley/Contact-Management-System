@@ -51,6 +51,8 @@ export interface DueDate {
   type: TouchType;
   dueDate: string;
   computedFromEventId: string | null;
+  /** Workflow overlay: suppress this touch from the queue until this date. */
+  snoozedUntil: string | null;
   updatedAt: string;
 }
 
@@ -81,6 +83,14 @@ export interface LogContactInput {
   eventDate: string;
   durationMinutes: number | null;
   notes: string | null;
+}
+
+export interface UpdateContactInput {
+  advisor?: AdvisorKey;
+  type?: ContactType;
+  eventDate?: string;
+  durationMinutes?: number | null;
+  notes?: string | null;
 }
 
 export interface AddClientInput {

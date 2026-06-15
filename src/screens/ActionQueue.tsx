@@ -19,8 +19,12 @@ import {
 import { formatShort } from "../lib/dates";
 import { AdvisorChip, DuePhrase, PriorityPill, TierBadge, TypeChip } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
-import { Input, Select } from "../components/ui";
+import { SnoozeButton } from "../components/SnoozeButton";
+import { Button, Input, Select } from "../components/ui";
 import { CheckCircleIcon, SearchIcon } from "../components/icons";
+import { CONTACT_TYPE_LABELS } from "../types";
+import { downloadCsv } from "../lib/exportCsv";
+import { dueLabel } from "../lib/dates";
 
 type AdvisorFilter = "mine" | "all" | AdvisorAssignment;
 type SortKey = "severity" | "due" | "household" | "tier" | "type";
@@ -109,6 +113,26 @@ export function ActionQueue() {
             before they're due and escalate when they slip.
           </p>
         </div>
+        <Button
+          disabled={rows.length === 0}
+          onClick={() =>
+            downloadCsv(
+              `action-queue-${today}.csv`,
+              ["Priority", "Household", "Tier", "Type", "Advisor", "Due date", "Status"],
+              rows.map(({ task, client }) => [
+                task.priority,
+                client.householdName,
+                `Tier ${client.tier}`,
+                CONTACT_TYPE_LABELS[task.type],
+                ADVISOR_LABELS[client.assignedAdvisor],
+                task.dueDate,
+                dueLabel(task.dueDate, today),
+              ]),
+            )
+          }
+        >
+          Export CSV
+        </Button>
       </header>
 
       <div className="flex flex-wrap items-center gap-2.5">
@@ -211,17 +235,25 @@ export function ActionQueue() {
                       <DuePhrase dueDate={task.dueDate} today={today} />
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        open(client.id);
-                      }}
-                      className="cursor-pointer rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm transition-colors hover:border-pine-600 hover:bg-pine-700 hover:text-white"
-                    >
-                      Log
-                    </button>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <SnoozeButton
+                        clientId={client.id}
+                        type={task.type}
+                        householdName={client.householdName}
+                        compact
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          open(client.id);
+                        }}
+                        className="cursor-pointer rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm transition-colors hover:border-pine-600 hover:bg-pine-700 hover:text-white"
+                      >
+                        Log
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

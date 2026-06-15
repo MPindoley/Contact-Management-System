@@ -3,7 +3,9 @@ import type {
   DataSnapshot,
   LogContactInput,
   ServiceModel,
+  TouchType,
   UpdateClientInput,
+  UpdateContactInput,
 } from "../../types";
 
 /**
@@ -22,6 +24,12 @@ export interface DataAdapter {
   addClient(input: AddClientInput): Promise<DataSnapshot>;
   /** Phase 2: bulk import from the CSV wizard. */
   importClients(inputs: AddClientInput[]): Promise<DataSnapshot>;
+  /** Correct a mis-logged touch; recomputes due dates. */
+  updateContactEvent(eventId: string, patch: UpdateContactInput): Promise<DataSnapshot>;
+  /** Remove a touch logged in error; recomputes due dates. */
+  deleteContactEvent(eventId: string): Promise<DataSnapshot>;
+  /** Defer a touch off the queue until `untilDate` (or clear with null). */
+  snoozeTouch(clientId: string, type: TouchType, untilDate: string | null): Promise<DataSnapshot>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
   /** Re-run the nightly rebuild on demand (the "6am job, now" button). */

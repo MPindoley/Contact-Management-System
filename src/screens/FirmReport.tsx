@@ -17,7 +17,11 @@ import { formatLong, formatMonth, monthKey } from "../lib/dates";
 import { ScoreRing } from "../components/ScoreRing";
 import { SCORE_DOT_STYLES, AdvisorChip, TierBadge, TypeChip } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
+import { Button } from "../components/ui";
 import { CheckCircleIcon } from "../components/icons";
+import { clientScore } from "../engine/serviceEngine";
+import { downloadCsv } from "../lib/exportCsv";
+import { latestContactFor } from "../lib/selectors";
 
 const ADVISOR_BUCKETS: AdvisorAssignment[] = ["matt", "advisor_b", "joint"];
 
@@ -81,14 +85,47 @@ export function FirmReport() {
 
   if (!data || !report) return null;
 
+  function exportLedger() {
+    if (!data) return;
+    const overdueByClient = new Map<string, number>();
+    for (const t of report!.overdueTasks) {
+      overdueByClient.set(t.clientId, (overdueByClient.get(t.clientId) ?? 0) + 1);
+    }
+    const rows = data.clients
+      .filter((c) => c.active)
+      .sort((a, b) => a.householdName.localeCompare(b.householdName))
+      .map((c) => {
+        const last = latestContactFor(data.contactEvents, c.id);
+        return [
+          c.householdName,
+          `Tier ${c.tier}`,
+          ADVISOR_LABELS[c.assignedAdvisor],
+          `${clientScore(c, data.contactEvents, data.serviceModels, today).score}%`,
+          overdueByClient.get(c.id) ?? 0,
+          last ? last.eventDate : "",
+        ];
+      });
+    downloadCsv(
+      `firm-service-report-${today}.csv`,
+      ["Household", "Tier", "Advisor", "Service score", "Overdue items", "Last contact"],
+      rows,
+    );
+  }
+
   return (
     <div className="animate-rise space-y-6">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Firm Service Report</h1>
-        <p className="mt-1.5 text-sm text-ink-soft">
-          As of {formatLong(today)} · score = contacts completed on schedule ÷ contacts required,
-          trailing 12 months.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Firm Service Report</h1>
+          <p className="mt-1.5 text-sm text-ink-soft">
+            As of {formatLong(today)} · score = contacts completed on schedule ÷ contacts required,
+            trailing 12 months.
+          </p>
+        </div>
+        <div className="no-print flex items-center gap-2">
+          <Button onClick={exportLedger}>Export CSV</Button>
+          <Button onClick={() => window.print()}>Print</Button>
+        </div>
       </header>
 
       <section className="grid gap-4 lg:grid-cols-4">

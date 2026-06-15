@@ -7,19 +7,21 @@ import { useApp } from "../lib/store";
 import { useLogContact } from "../components/LogContactModal";
 import { clientScore, modelFor } from "../engine/serviceEngine";
 import { addDays, formatMedium, formatMonth, formatShort, monthKey } from "../lib/dates";
-import { ADVISOR_LABELS, type TouchType } from "../types";
+import { ADVISOR_LABELS, type ContactEvent, type TouchType } from "../types";
 import { AdvisorChip, DuePhrase, TierBadge, TypeChip } from "../components/badges";
 import { ScoreRing } from "../components/ScoreRing";
 import { ClientFormModal } from "../components/ClientFormModal";
+import { EditContactModal } from "../components/EditContactModal";
 import { EmptyState } from "../components/EmptyState";
 import { Button } from "../components/ui";
-import { CalendarIcon, PhoneIcon, PlusIcon } from "../components/icons";
+import { CalendarIcon, ClockIcon, PhoneIcon, PlusIcon } from "../components/icons";
 
 export function ClientProfile() {
   const { clientId } = useParams<{ clientId: string }>();
   const { data, today } = useApp();
   const { open } = useLogContact();
   const [editing, setEditing] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<ContactEvent | null>(null);
 
   const client = data?.clients.find((c) => c.id === clientId) ?? null;
 
@@ -109,17 +111,23 @@ export function ClientProfile() {
         <div className="space-y-4 lg:col-span-2">
           <div className="grid gap-4 sm:grid-cols-2">
             <DueCard
+              clientId={client.id}
+              householdName={client.householdName}
               type="meeting"
               due={derived.meetingDue?.dueDate ?? null}
               basedOn={derived.meetingDue?.computedFromEventId ?? null}
+              snoozedUntil={derived.meetingDue?.snoozedUntil ?? null}
               eventsById={derived.eventsById}
               today={today}
               active={client.active}
             />
             <DueCard
+              clientId={client.id}
+              householdName={client.householdName}
               type="call"
               due={derived.callDue?.dueDate ?? null}
               basedOn={derived.callDue?.computedFromEventId ?? null}
+              snoozedUntil={derived.callDue?.snoozedUntil ?? null}
               eventsById={derived.eventsById}
               today={today}
               active={client.active}
@@ -150,7 +158,7 @@ export function ClientProfile() {
                       {events.map((e) => (
                         <li
                           key={e.id}
-                          className="flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-stone-50"
+                          className="group flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-stone-50"
                         >
                           <span className="tnum w-12 shrink-0 pt-0.5 text-xs font-semibold text-ink-soft">
                             {formatShort(e.eventDate).replace(/, \d{4}$/, "")}
@@ -167,6 +175,13 @@ export function ClientProfile() {
                               {e.durationMinutes ? ` · ${e.durationMinutes} min` : ""}
                             </p>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditingEvent(e)}
+                            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-ink-soft opacity-0 transition-opacity hover:bg-stone-200/70 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                          >
+                            Edit
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -218,29 +233,40 @@ export function ClientProfile() {
       </div>
 
       <ClientFormModal open={editing} onClose={() => setEditing(false)} client={client} />
+      {editingEvent && (
+        <EditContactModal event={editingEvent} onClose={() => setEditingEvent(null)} />
+      )}
     </div>
   );
 }
 
 function DueCard({
+  clientId,
+  householdName,
   type,
   due,
   basedOn,
+  snoozedUntil,
   eventsById,
   today,
   active,
 }: {
+  clientId: string;
+  householdName: string;
   type: TouchType;
   due: string | null;
   basedOn: string | null;
+  snoozedUntil: string | null;
   eventsById: Map<string, { eventDate: string }>;
   today: string;
   active: boolean;
 }) {
+  const { snoozeTouch } = useApp();
   const Icon = type === "meeting" ? CalendarIcon : PhoneIcon;
   const tone = type === "meeting" ? "text-pine-700 bg-pine-50" : "text-sky-700 bg-sky-50";
   const source = basedOn ? eventsById.get(basedOn) : null;
-  const overdue = due !== null && due < today && active;
+  const isSnoozed = snoozedUntil !== null && snoozedUntil > today;
+  const overdue = due !== null && due < today && active && !isSnoozed;
 
   return (
     <div className={`card p-4 ${overdue ? "border-clay-300 bg-clay-50/40" : ""}`}>
@@ -263,6 +289,22 @@ function DueCard({
               </span>
             )}
           </div>
+          {isSnoozed && (
+            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-amber-900">
+                <ClockIcon className="size-3.5" />
+                Snoozed until {formatMedium(snoozedUntil!)}
+              </span>
+              <button
+                type="button"
+                onClick={() => void snoozeTouch(clientId, type, null)}
+                title={`Bring ${householdName} back to the queue now`}
+                className="cursor-pointer text-xs font-medium text-amber-900 underline-offset-2 hover:underline"
+              >
+                Un-snooze
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <p className="mt-3 text-sm text-stone-400">

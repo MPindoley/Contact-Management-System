@@ -19,7 +19,9 @@ import type {
   DueDate,
   LogContactInput,
   ServiceModel,
+  TouchType,
   UpdateClientInput,
+  UpdateContactInput,
   User,
 } from "../types";
 import type { DataAdapter } from "./data/adapter";
@@ -52,6 +54,9 @@ interface AppContextValue {
   logContact(input: LogContactInput): Promise<DueDate[]>;
   addClient(input: AddClientInput): Promise<Client | null>;
   importClients(inputs: AddClientInput[]): Promise<void>;
+  updateContactEvent(eventId: string, patch: UpdateContactInput): Promise<void>;
+  deleteContactEvent(eventId: string): Promise<void>;
+  snoozeTouch(clientId: string, type: TouchType, untilDate: string | null): Promise<void>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
   rebuildQueue(): Promise<void>;
@@ -275,6 +280,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  const updateContactEvent = useCallback(
+    (eventId: string, patch: UpdateContactInput) =>
+      run(() => adapter.updateContactEvent(eventId, patch)),
+    [adapter, run],
+  );
+
+  const deleteContactEvent = useCallback(
+    (eventId: string) => run(() => adapter.deleteContactEvent(eventId)),
+    [adapter, run],
+  );
+
+  const snoozeTouch = useCallback(
+    (clientId: string, type: TouchType, untilDate: string | null) =>
+      run(() => adapter.snoozeTouch(clientId, type, untilDate)),
+    [adapter, run],
+  );
+
   const updateClient = useCallback(
     (clientId: string, patch: UpdateClientInput) =>
       run(() => adapter.updateClient(clientId, patch)),
@@ -310,6 +332,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       logContact,
       addClient,
       importClients,
+      updateContactEvent,
+      deleteContactEvent,
+      snoozeTouch,
       updateClient,
       updateServiceModel,
       rebuildQueue,
@@ -318,7 +343,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       mode, authReady, currentUser, signInDemo, signInSupabase, signUpSupabase, signOut,
       data, loading, busy, error, today, refresh,
-      logContact, addClient, importClients, updateClient, updateServiceModel, rebuildQueue, resetDemo,
+      logContact, addClient, importClients, updateContactEvent, deleteContactEvent, snoozeTouch,
+      updateClient, updateServiceModel, rebuildQueue, resetDemo,
     ],
   );
 

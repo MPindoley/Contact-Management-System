@@ -157,6 +157,26 @@ describe("tasks", () => {
     expect(tasks[0].priority).toBe("high");
   });
 
+  it("suppresses a snoozed touch until the snooze date passes", () => {
+    const client = mkClient({ tier: "A" });
+    const due = computeClientDueDates(
+      client,
+      [mkEvent(client.id, { type: "call", eventDate: "2026-05-01" })], // due 2026-05-31, overdue
+      MODELS,
+    );
+    expect(buildClientTasks(client, due, TODAY)).toHaveLength(1);
+
+    // Snooze a few days into the future — drops off the queue entirely.
+    const snoozed = due.map((d) => ({ ...d, snoozedUntil: "2026-06-14" }));
+    expect(buildClientTasks(client, snoozed, TODAY)).toHaveLength(0);
+
+    // On the snooze date it returns, still aged from the real due date.
+    const back = buildClientTasks(client, snoozed, "2026-06-14");
+    expect(back).toHaveLength(1);
+    expect(back[0].daysOverdue).toBe(14); // 2026-05-31 → 2026-06-14
+    expect(back[0].priority).toBe("high");
+  });
+
   it("generates nothing for inactive clients", () => {
     const client = mkClient({ active: false });
     const due = computeClientDueDates(
