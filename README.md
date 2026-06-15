@@ -105,6 +105,22 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 5. **Firm Service Report** — scores by advisor and tier, overdue counts,
    contacts this month vs the pace the book demands. Monday standup, ready.
 
+### Daily-use touches
+
+- **Fix & undo** — hover any touch on a Client Profile to edit or delete it;
+  the due date reflows through the same engine, so a mis-logged date never
+  leaves a stale reminder.
+- **Snooze** — "left a voicemail, remind me Thursday." Defers a touch off the
+  dashboard and queue for 3 days / 1 week / 2 weeks without falsely resetting
+  the service clock; it reappears on the day, still aged from the real due
+  date, and any logged contact clears it. Un-snooze from the Client Profile.
+- **Export & print** — Download-CSV on the Action Queue (the filtered list)
+  and the Firm Report (a per-household service ledger), plus a clean Print
+  view of the report for standup.
+- **Install on your phone** — it's a PWA: "Add to Home Screen" on iOS/Android
+  and it opens full-screen like a native app, with the shell cached for
+  flaky-signal moments.
+
 ## Project layout
 
 ```
@@ -150,5 +166,9 @@ their book + joint and gives the assistant the firm-wide view.
   Setup in [`supabase/README.md`](supabase/README.md) § 6. Outlook calendar
   pull remains optional/deferred — it needs a Microsoft Azure app
   registration, and logging a touch is already a 10-second modal.
-- **Phase 4** — live Redtail sync once API access lands (`redtail_id` is
-  already on every client).
+- **Phase 4 — built, waiting on Redtail.** A nightly sync function
+  (`supabase/functions/redtail-sync`) reconciles the book against the
+  Redtail API: creates, renames, re-links, deactivations — never touching
+  tiers or advisors, dry-run by default. Request an API key from Redtail
+  support, paste in three secrets, and flip `REDTAIL_SYNC_APPLY=true`.
+  Setup in [`supabase/README.md`](supabase/README.md) § 7.
