@@ -29,6 +29,13 @@ export function openTasks(tasks: Task[]): Task[] {
   return tasks.filter((t) => t.status === "open");
 }
 
+/** Keys ("clientId:type") of due dates that are first-outreach placeholders. */
+export function outreachKeys(dueDates: DueDate[]): Set<string> {
+  return new Set(
+    dueDates.filter((d) => d.computedFromEventId === null).map((d) => `${d.clientId}:${d.type}`),
+  );
+}
+
 const TIER_ORDER = { A: 0, B: 1, C: 2 } as const;
 
 /** Sort tasks for a "due today" column: Tier A first, then by name. */

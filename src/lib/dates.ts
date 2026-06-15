@@ -23,6 +23,18 @@ export function addDays(iso: string, days: number): string {
   return toISODate(d);
 }
 
+export function isWeekend(iso: string): boolean {
+  const day = parseISO(iso).getDay();
+  return day === 0 || day === 6;
+}
+
+/** The given date, or the next Monday if it lands on a weekend. */
+export function nextWeekday(iso: string): string {
+  let cur = iso;
+  while (isWeekend(cur)) cur = addDays(cur, 1);
+  return cur;
+}
+
 /** Whole days from `a` to `b` (positive when `b` is after `a`). */
 export function diffDays(a: string, b: string): number {
   const ms = parseISO(b).getTime() - parseISO(a).getTime();

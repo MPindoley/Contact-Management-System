@@ -67,6 +67,7 @@ export type ImportField =
   | "advisor"
   | "tier"
   | "revenue"
+  | "phone"
   | "lastMeetingDate"
   | "lastCallDate"
   | "redtailId";
@@ -78,6 +79,7 @@ const HEADER_HINTS: Record<ImportField, RegExp> = {
   advisor: /advisor|rep\b|servicer|owner|assigned/i,
   tier: /tier|segment|class(?!ic)|category|level/i,
   revenue: /revenue|aum|assets|value|fee/i,
+  phone: /phone|mobile|cell|telephone|^tel$/i,
   lastMeetingDate: /last.*(meeting|review|appt|appointment)|meeting.*date/i,
   lastCallDate: /last.*(call|contact|touch)|call.*date/i,
   redtailId: /redtail|crm.?id|contact.?id|^id$/i,
@@ -246,6 +248,7 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
     if (callRaw && !lastCallDate) warnings.push(`couldn't read call date "${callRaw}"`);
 
     const redtailId = cell(raw, "redtailId") || null;
+    const phone = cell(raw, "phone") || null;
 
     // Duplicates: against the existing book and within the file itself.
     const nameKey = name.toLowerCase();
@@ -267,6 +270,7 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
         householdName: name,
         assignedAdvisor: advisor,
         tier,
+        phone,
         redtailId,
         lastMeetingDate,
         lastCallDate,
@@ -296,8 +300,8 @@ export function distinctAdvisorValues(csv: ParsedCsv, mapping: ColumnMapping): s
 }
 
 export const CSV_TEMPLATE = [
-  "Household Name,Advisor,Revenue,Last Meeting,Last Call,Redtail ID",
-  '"Whitfield, Daniel & Mara",Matt,18500,3/14/2026,5/28/2026,48200',
-  '"Castellanos Family",Advisor B,9200,1/9/2026,4/2/2026,48237',
-  '"Abernathy, Gordon",Joint,2400,11/20/2025,2/13/2026,48274',
+  "Household Name,Advisor,Revenue,Phone,Last Meeting,Last Call,Redtail ID",
+  '"Whitfield, Daniel & Mara",Matt,18500,(419) 555-0182,3/14/2026,5/28/2026,48200',
+  '"Castellanos Family",Beau,9200,(419) 555-0143,1/9/2026,4/2/2026,48237',
+  '"Abernathy, Gordon",Joint,2400,(419) 555-0117,11/20/2025,2/13/2026,48274',
 ].join("\n");

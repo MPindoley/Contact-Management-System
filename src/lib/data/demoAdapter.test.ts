@@ -97,6 +97,7 @@ describe("demo adapter — full service loop", () => {
       householdName: "Test Household",
       assignedAdvisor: "joint",
       tier: "A",
+      phone: null,
       redtailId: null,
       lastMeetingDate: addDays(today, -10),
       lastCallDate: addDays(today, -35), // call overdue for Tier A (30d)
@@ -172,6 +173,7 @@ describe("demo adapter — full service loop", () => {
       householdName: "Persisted Household",
       assignedAdvisor: "matt",
       tier: "C",
+      phone: "419-555-0199",
       redtailId: "999",
       lastMeetingDate: null,
       lastCallDate: null,

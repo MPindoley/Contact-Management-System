@@ -28,6 +28,7 @@ const FIELD_LABELS: Array<{ field: ImportField; label: string; hint: string }> =
   { field: "advisor", label: "Advisor", hint: "Map each value below once chosen." },
   { field: "tier", label: "Tier (A/B/C)", hint: "If your file already has tiers." },
   { field: "revenue", label: "Revenue / AUM", hint: "Used to auto-assign tiers by cutoff." },
+  { field: "phone", label: "Phone number", hint: "Shows up when a call is due." },
   { field: "lastMeetingDate", label: "Last meeting date", hint: "Starts the meeting clock." },
   { field: "lastCallDate", label: "Last call date", hint: "Starts the call clock." },
   { field: "redtailId", label: "Redtail ID", hint: "For the future live sync." },

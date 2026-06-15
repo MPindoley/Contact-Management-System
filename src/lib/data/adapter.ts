@@ -30,6 +30,8 @@ export interface DataAdapter {
   deleteContactEvent(eventId: string): Promise<DataSnapshot>;
   /** Defer a touch off the queue until `untilDate` (or clear with null). */
   snoozeTouch(clientId: string, type: TouchType, untilDate: string | null): Promise<DataSnapshot>;
+  /** Schedule first-touch calls for never-contacted clients (Phase: outreach). */
+  planOutreach(items: Array<{ clientId: string; dueDate: string }>): Promise<DataSnapshot>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
   /** Re-run the nightly rebuild on demand (the "6am job, now" button). */

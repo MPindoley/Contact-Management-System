@@ -13,6 +13,7 @@ import { ScoreRing } from "../components/ScoreRing";
 import { ClientFormModal } from "../components/ClientFormModal";
 import { EditContactModal } from "../components/EditContactModal";
 import { EmptyState } from "../components/EmptyState";
+import { PhoneLink } from "../components/PhoneLink";
 import { Button } from "../components/ui";
 import { CalendarIcon, ClockIcon, PhoneIcon, PlusIcon } from "../components/icons";
 
@@ -90,6 +91,7 @@ export function ClientProfile() {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <TierBadge tier={client.tier} label />
               <AdvisorChip advisor={client.assignedAdvisor} />
+              {client.phone && <PhoneLink phone={client.phone} className="text-[13px]" />}
               <span className="text-xs text-stone-400">
                 Meeting every {derived.model.meetingIntervalDays}d · call every{" "}
                 {derived.model.callIntervalDays}d
@@ -283,10 +285,12 @@ function DueCard({
           <p className="font-display text-2xl font-semibold tracking-tight">{formatMedium(due)}</p>
           <div className="mt-1 flex items-center gap-2">
             <DuePhrase dueDate={due} today={today} />
-            {source && (
+            {source ? (
               <span className="text-xs text-stone-400">
                 · from the one on {formatShort(source.eventDate)}
               </span>
+            ) : (
+              <span className="text-xs font-medium text-gold-700">· first outreach</span>
             )}
           </div>
           {isSnoozed && (

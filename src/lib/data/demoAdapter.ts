@@ -99,9 +99,20 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
     const client = s.snapshot.clients.find((c) => c.id === clientId);
     if (!client) return;
     const fresh = computeClientDueDates(client, s.snapshot.contactEvents, s.snapshot.serviceModels);
+    // Preserve first-outreach placeholders (no source event) until the client
+    // has been contacted for the first time; then the real cadence takes over.
+    const hasContact = s.snapshot.contactEvents.some(
+      (e) => e.clientId === clientId && e.type !== "admin",
+    );
+    const preservedOutreach = hasContact
+      ? []
+      : s.snapshot.dueDates.filter(
+          (d) => d.clientId === clientId && d.computedFromEventId === null,
+        );
     s.snapshot.dueDates = [
       ...s.snapshot.dueDates.filter((d) => d.clientId !== clientId),
       ...fresh,
+      ...preservedOutreach,
     ];
   }
 
@@ -150,6 +161,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         assignedAdvisor: input.assignedAdvisor,
         tier: input.tier,
         active: true,
+        phone: input.phone?.trim() || null,
         redtailId: input.redtailId?.trim() || null,
         createdAt: now,
       };
@@ -190,6 +202,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
           assignedAdvisor: input.assignedAdvisor,
           tier: input.tier,
           active: true,
+          phone: input.phone?.trim() || null,
           redtailId: input.redtailId?.trim() || null,
           createdAt: now,
         };
@@ -253,6 +266,28 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         due.snoozedUntil = untilDate;
         rebuild(todayISO());
       }
+      return snapshot();
+    },
+
+    async planOutreach(items: Array<{ clientId: string; dueDate: string }>) {
+      const s = ensureLoaded();
+      const now = new Date().toISOString();
+      for (const item of items) {
+        // Don't clobber a client who already has a call due date.
+        if (s.snapshot.dueDates.some((d) => d.clientId === item.clientId && d.type === "call")) {
+          continue;
+        }
+        s.snapshot.dueDates.push({
+          id: uid(),
+          clientId: item.clientId,
+          type: "call",
+          dueDate: item.dueDate,
+          computedFromEventId: null, // marks a first-outreach placeholder
+          snoozedUntil: null,
+          updatedAt: now,
+        });
+      }
+      rebuild(todayISO());
       return snapshot();
     },
 

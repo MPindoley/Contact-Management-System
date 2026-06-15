@@ -86,6 +86,7 @@ interface ClientRow {
   assigned_advisor: AdvisorAssignment;
   tier: Tier;
   active: boolean;
+  phone: string | null;
   redtail_id: string | null;
   created_at: string;
 }
@@ -137,6 +138,7 @@ const mapClient = (r: ClientRow): Client => ({
   assignedAdvisor: r.assigned_advisor,
   tier: r.tier,
   active: r.active,
+  phone: r.phone,
   redtailId: r.redtail_id,
   createdAt: r.created_at,
 });
@@ -229,6 +231,7 @@ export function createSupabaseAdapter(): DataAdapter {
           household_name: input.householdName.trim(),
           assigned_advisor: input.assignedAdvisor,
           tier: input.tier,
+          phone: input.phone?.trim() || null,
           redtail_id: input.redtailId?.trim() || null,
         })
         .select("id")
@@ -269,6 +272,7 @@ export function createSupabaseAdapter(): DataAdapter {
               household_name: c.householdName.trim(),
               assigned_advisor: c.assignedAdvisor,
               tier: c.tier,
+              phone: c.phone?.trim() || null,
               redtail_id: c.redtailId?.trim() || null,
             })),
           )
@@ -332,12 +336,21 @@ export function createSupabaseAdapter(): DataAdapter {
       return fetchSnapshot();
     },
 
+    async planOutreach(items: Array<{ clientId: string; dueDate: string }>) {
+      const { error } = await db.rpc("plan_outreach", {
+        p_items: items.map((i) => ({ client_id: i.clientId, due_date: i.dueDate })),
+      });
+      if (error) throw new Error(`Planning outreach: ${error.message}`);
+      return fetchSnapshot();
+    },
+
     async updateClient(clientId: string, patch: UpdateClientInput) {
       const row: Record<string, unknown> = {};
       if (patch.householdName !== undefined) row.household_name = patch.householdName.trim();
       if (patch.assignedAdvisor !== undefined) row.assigned_advisor = patch.assignedAdvisor;
       if (patch.tier !== undefined) row.tier = patch.tier;
       if (patch.active !== undefined) row.active = patch.active;
+      if (patch.phone !== undefined) row.phone = patch.phone?.trim() || null;
 
       const { error } = await db.from("clients").update(row).eq("id", clientId);
       if (error) throw new Error(`Updating client: ${error.message}`);

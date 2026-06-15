@@ -6,27 +6,46 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { latestContactFor, nextDueFor } from "../lib/selectors";
 import { clientScore } from "../engine/serviceEngine";
+import { outreachCandidates } from "../engine/outreach";
 import { ADVISOR_LABELS, type AdvisorAssignment, type Tier } from "../types";
 import { formatShort } from "../lib/dates";
 import { AdvisorChip, DuePhrase, ScorePill, TierBadge } from "../components/badges";
 import { ClientFormModal } from "../components/ClientFormModal";
+import { PlanOutreachModal } from "../components/PlanOutreachModal";
 import { EmptyState } from "../components/EmptyState";
 import { Button, Input, Select } from "../components/ui";
-import { PlusIcon, SearchIcon, UsersIcon } from "../components/icons";
+import { PlusIcon, SearchIcon, SunriseIcon, UsersIcon } from "../components/icons";
+
+const TIER_ORDER: Record<Tier, number> = { A: 0, B: 1, C: 2 };
+type ClientSortKey = "household" | "tier" | "score";
 
 export function Clients() {
-  const { data, today } = useApp();
+  const { data, today, currentUser } = useApp();
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
+  const [planning, setPlanning] = useState(false);
+
+  const neverContacted = useMemo(
+    () => (data ? outreachCandidates(data.clients, data.contactEvents, data.dueDates).length : 0),
+    [data],
+  );
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<"all" | Tier>("all");
-  const [advisorFilter, setAdvisorFilter] = useState<"all" | AdvisorAssignment>("all");
+  // Default to the signed-in advisor's own book so they don't reset the
+  // dropdown every visit; the assistant defaults to everyone.
+  const [advisorFilter, setAdvisorFilter] = useState<"all" | AdvisorAssignment>(
+    () => currentUser?.advisorKey ?? "all",
+  );
   const [showInactive, setShowInactive] = useState(false);
+  const [sort, setSort] = useState<{ key: ClientSortKey; dir: 1 | -1 }>({
+    key: "household",
+    dir: 1,
+  });
 
   const rows = useMemo(() => {
     if (!data) return [];
     const q = search.trim().toLowerCase();
-    return data.clients
+    const mapped = data.clients
       .filter((c) => showInactive || c.active)
       .filter((c) => tierFilter === "all" || c.tier === tierFilter)
       .filter((c) => advisorFilter === "all" || c.assignedAdvisor === advisorFilter)
@@ -36,9 +55,21 @@ export function Clients() {
         lastContact: latestContactFor(data.contactEvents, client.id),
         nextDue: nextDueFor(data.dueDates, client.id),
         score: clientScore(client, data.contactEvents, data.serviceModels, today).score,
-      }))
-      .sort((a, b) => a.client.householdName.localeCompare(b.client.householdName));
-  }, [data, search, tierFilter, advisorFilter, showInactive, today]);
+      }));
+
+    const byName = (a: typeof mapped[number], b: typeof mapped[number]) =>
+      a.client.householdName.localeCompare(b.client.householdName);
+    return mapped.sort((a, b) => {
+      let primary = 0;
+      if (sort.key === "household") primary = byName(a, b);
+      else if (sort.key === "tier") primary = TIER_ORDER[a.client.tier] - TIER_ORDER[b.client.tier];
+      else primary = a.score - b.score;
+      return (primary || byName(a, b)) * sort.dir;
+    });
+  }, [data, search, tierFilter, advisorFilter, showInactive, today, sort]);
+
+  const toggleSort = (key: ClientSortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
   if (!data) return null;
 
@@ -62,6 +93,25 @@ export function Clients() {
           </Button>
         </div>
       </header>
+
+      {neverContacted > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gold-300 bg-gold-50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gold-100 text-gold-700">
+              <SunriseIcon className="size-5" />
+            </span>
+            <p className="text-sm leading-snug text-gold-900">
+              <span className="font-semibold">
+                {neverContacted} {neverContacted === 1 ? "household has" : "households have"}
+              </span>{" "}
+              never been contacted — invisible to your queue until you reach out.
+            </p>
+          </div>
+          <Button variant="primary" onClick={() => setPlanning(true)}>
+            Plan initial outreach
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="relative">
@@ -125,12 +175,12 @@ export function Clients() {
           <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/60 text-left text-[11px] font-semibold tracking-wider text-ink-soft uppercase">
-                <th className="px-4 py-2.5">Household</th>
-                <th className="px-4 py-2.5">Tier</th>
+                <SortHeader label="Household" sortKey="household" sort={sort} onSort={toggleSort} />
+                <SortHeader label="Tier" sortKey="tier" sort={sort} onSort={toggleSort} />
                 <th className="px-4 py-2.5">Advisor</th>
                 <th className="px-4 py-2.5">Last contact</th>
                 <th className="px-4 py-2.5">Next due</th>
-                <th className="px-4 py-2.5">Service score</th>
+                <SortHeader label="Service score" sortKey="score" sort={sort} onSort={toggleSort} />
               </tr>
             </thead>
             <tbody>
@@ -175,6 +225,33 @@ export function Clients() {
       </div>
 
       <ClientFormModal open={adding} onClose={() => setAdding(false)} />
+      {planning && <PlanOutreachModal onClose={() => setPlanning(false)} />}
     </div>
+  );
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: ClientSortKey;
+  sort: { key: ClientSortKey; dir: 1 | -1 };
+  onSort: (key: ClientSortKey) => void;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th className="px-4 py-2.5">
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-semibold tracking-wider text-ink-soft uppercase hover:text-ink"
+      >
+        {label}
+        {active && <span className="text-pine-600">{sort.dir === 1 ? "↓" : "↑"}</span>}
+      </button>
+    </th>
   );
 }

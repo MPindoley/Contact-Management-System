@@ -196,6 +196,50 @@ begin
   assert d.due_date = current_date - 10 + 30, 'edited contact reflows due date, got ' || d.due_date;
 end $$;
 
+-- Initial outreach: a never-contacted client gets a first-touch placeholder
+-- that survives recomputes and converts to real cadence on first contact.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('55555555-5555-5555-5555-555555555555', 'Never Contacted', 'matt', 'A');
+
+select plan_outreach(
+  ('[{"client_id":"55555555-5555-5555-5555-555555555555","due_date":"' || current_date || '"}]')::jsonb
+);
+
+do $$
+declare d record; n int;
+begin
+  select * into strict d from due_dates
+    where client_id = '55555555-5555-5555-5555-555555555555' and type = 'call';
+  assert d.computed_from_event_id is null, 'outreach placeholder has no source event';
+  select count(*) into n from tasks
+    where client_id = '55555555-5555-5555-5555-555555555555' and status = 'open';
+  assert n = 1, 'outreach placeholder produced a task';
+end $$;
+
+-- A service-model edit (recompute_all) must NOT wipe the placeholder.
+update service_models set call_interval_days = call_interval_days where tier = 'A';
+
+do $$
+declare n int;
+begin
+  select count(*) into n from due_dates
+    where client_id = '55555555-5555-5555-5555-555555555555' and computed_from_event_id is null;
+  assert n = 1, 'outreach placeholder survives recompute_all';
+end $$;
+
+-- Logging the first real call converts it to the true cadence.
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('55555555-5555-5555-5555-555555555555', 'matt', 'call', current_date);
+
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = '55555555-5555-5555-5555-555555555555' and type = 'call';
+  assert d.computed_from_event_id is not null, 'placeholder became a computed due date';
+  assert d.due_date = current_date + 30, 'first contact starts the real Tier A call clock';
+end $$;
+
 -- Deactivation clears open tasks; rebuild_tasks() is idempotent.
 update clients set active = false where id = '11111111-1111-1111-1111-111111111111';
 

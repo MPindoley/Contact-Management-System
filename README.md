@@ -107,6 +107,22 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 
 ### Daily-use touches
 
+- **Phone numbers** — store a number per household (manual form or a mapped
+  CSV column). It shows as a tap-to-call link on call cards, the queue, and
+  the profile — so when a call comes due, the number's right there and dials
+  straight from your phone. Meetings don't show it; it's there for calling.
+- **Your book by default** — the Clients list opens filtered to the signed-in
+  advisor (the assistant sees everyone); switch to Joint, Beau, or All when
+  you want. Sort the list by household, tier, or service score.
+- **Plan initial outreach** — a never-contacted household has no history, so
+  the engine gives it no due date and it stays invisible. The Clients screen
+  flags how many there are and offers a one-time **Plan initial outreach**:
+  it schedules a first-touch call for each, Tier A first, a few per weekday
+  (weekends skipped) over a stretch you choose. The 14-day horizon then keeps
+  all but the imminent ones off the dashboard, so they arrive a handful a day.
+  Logging the first real call converts the household to its normal cadence;
+  these placeholders survive service-model edits but never overwrite real
+  history. Flagged with a gold "First outreach" badge until contacted.
 - **Fix & undo** — hover any touch on a Client Profile to edit or delete it;
   the due date reflows through the same engine, so a mis-logged date never
   leaves a stale reminder.

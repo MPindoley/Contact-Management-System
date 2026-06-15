@@ -34,6 +34,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
   const [advisor, setAdvisor] = useState<AdvisorAssignment>(client?.assignedAdvisor ?? "matt");
   const [tier, setTier] = useState<Tier>(client?.tier ?? "B");
   const [active, setActive] = useState(client?.active ?? true);
+  const [phone, setPhone] = useState(client?.phone ?? "");
   const [redtailId, setRedtailId] = useState(client?.redtailId ?? "");
   const [lastMeeting, setLastMeeting] = useState(todayISO());
   const [lastCall, setLastCall] = useState(todayISO());
@@ -52,6 +53,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           assignedAdvisor: advisor,
           tier,
           active,
+          phone: phone.trim() || null,
         });
         toast.push(
           tier !== client.tier
@@ -64,6 +66,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           householdName: name,
           assignedAdvisor: advisor,
           tier,
+          phone: phone.trim() || null,
           redtailId: redtailId || null,
           lastMeetingDate: lastMeeting || null,
           lastCallDate: lastCall || null,
@@ -102,6 +105,15 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Whitfield, Daniel & Mara"
+          />
+        </Field>
+
+        <Field label="Phone number" hint="Shows up as a tap-to-call link when a call is due.">
+          <Input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="(419) 555-1234"
           />
         </Field>
 

@@ -7,12 +7,13 @@ import { Link } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { useLogContact } from "../components/LogContactModal";
-import { clientsById, openTasks, sortByTierThenName } from "../lib/selectors";
+import { clientsById, openTasks, outreachKeys, sortByTierThenName } from "../lib/selectors";
 import { dashboardBuckets } from "../engine/serviceEngine";
 import { clientInScope, scopeFor, type Client, type Task } from "../types";
 import { addDays, formatLong, formatShort, timeOfDayGreeting } from "../lib/dates";
-import { AdvisorChip, DuePhrase, TierBadge } from "../components/badges";
+import { AdvisorChip, DuePhrase, OutreachBadge, TierBadge } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
+import { PhoneLink } from "../components/PhoneLink";
 import { SnoozeButton } from "../components/SnoozeButton";
 import { Segmented } from "../components/ui";
 import {
@@ -43,6 +44,7 @@ export function Dashboard() {
     const buckets = dashboardBuckets(tasks, today);
     return {
       byId,
+      outreach: outreachKeys(data.dueDates),
       isAdvisor: scope !== "all",
       callsToday: sortByTierThenName(buckets.callsToday, byId),
       meetingsToday: sortByTierThenName(buckets.meetingsToday, byId),
@@ -111,7 +113,7 @@ export function Dashboard() {
           }
         >
           {derived.callsToday.map((t) => (
-            <TaskCard key={t.id} task={t} client={derived.byId.get(t.clientId)!} today={today} />
+            <TaskCard key={t.id} task={t} client={derived.byId.get(t.clientId)!} today={today} isOutreach={derived.outreach.has(`${t.clientId}:${t.type}`)} />
           ))}
         </Column>
 
@@ -129,7 +131,7 @@ export function Dashboard() {
           }
         >
           {derived.meetingsToday.map((t) => (
-            <TaskCard key={t.id} task={t} client={derived.byId.get(t.clientId)!} today={today} />
+            <TaskCard key={t.id} task={t} client={derived.byId.get(t.clientId)!} today={today} isOutreach={derived.outreach.has(`${t.clientId}:${t.type}`)} />
           ))}
         </Column>
 
@@ -148,7 +150,7 @@ export function Dashboard() {
           }
         >
           {derived.overdue.map((t) => (
-            <TaskCard key={t.id} task={t} client={derived.byId.get(t.clientId)!} today={today} />
+            <TaskCard key={t.id} task={t} client={derived.byId.get(t.clientId)!} today={today} isOutreach={derived.outreach.has(`${t.clientId}:${t.type}`)} />
           ))}
         </Column>
       </div>
@@ -224,7 +226,17 @@ function Column({ title, accent, icon, count, countTone = "default", empty, chil
   );
 }
 
-function TaskCard({ task, client, today }: { task: Task; client: Client; today: string }) {
+function TaskCard({
+  task,
+  client,
+  today,
+  isOutreach,
+}: {
+  task: Task;
+  client: Client;
+  today: string;
+  isOutreach: boolean;
+}) {
   const { open } = useLogContact();
   return (
     <div className="group rounded-xl border border-stone-200 bg-white p-3 transition-all hover:-translate-y-px hover:border-stone-300 hover:shadow-lift">
@@ -241,8 +253,13 @@ function TaskCard({ task, client, today }: { task: Task; client: Client; today: 
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <AdvisorChip advisor={client.assignedAdvisor} />
-            <DuePhrase dueDate={task.dueDate} today={today} />
+            {isOutreach ? <OutreachBadge /> : <DuePhrase dueDate={task.dueDate} today={today} />}
           </div>
+          {task.type === "call" && client.phone && (
+            <div className="mt-1.5">
+              <PhoneLink phone={client.phone} />
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <SnoozeButton clientId={client.id} type={task.type} householdName={client.householdName} />

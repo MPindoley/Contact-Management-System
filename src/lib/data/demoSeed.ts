@@ -116,12 +116,15 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
 
     // The household joined the book before its oldest logged touch.
     const oldest = Math.min(spec.lastMeeting, spec.lastCall) - 60;
+    const exchange = 200 + Math.floor(rand() * 700);
+    const line = String(1000 + Math.floor(rand() * 9000));
     clients.push({
       id: clientId,
       householdName: spec.name,
       assignedAdvisor: spec.advisor,
       tier: spec.tier,
       active: true,
+      phone: `(419) ${exchange}-${line}`,
       redtailId: String(48200 + i * 37),
       createdAt: `${addDays(today, oldest)}T09:00:00.000Z`,
     });

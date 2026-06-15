@@ -34,6 +34,7 @@ function mkClient(overrides: Partial<Client> = {}): Client {
     assignedAdvisor: "matt",
     tier: "A",
     active: true,
+    phone: null,
     redtailId: null,
     createdAt: "2024-01-01T00:00:00.000Z",
     ...overrides,

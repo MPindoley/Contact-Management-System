@@ -46,6 +46,7 @@ create table clients (
   assigned_advisor advisor_assignment not null default 'matt',
   tier             client_tier not null default 'B',
   active           boolean not null default true,
+  phone            text,
   redtail_id       text unique,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
@@ -172,14 +173,27 @@ begin
         snoozed_until          = null,  -- a fresh contact clears any snooze
         updated_at             = now();
 
-  -- Drop due dates that no longer have a source event (e.g. event deleted).
+  -- Prune computed due dates whose source event is gone (e.g. event deleted).
+  -- First-outreach placeholders (computed_from_event_id is null) are left
+  -- alone here so they survive recomputes until a real contact happens.
   delete from due_dates d
   where d.client_id = p_client
+    and d.computed_from_event_id is not null
     and not exists (
       select 1 from contact_events e
       where e.client_id = p_client
         and e.type <> 'admin'
         and e.type::text = d.type::text
+    );
+
+  -- Clear first-outreach placeholders once the client has any real contact —
+  -- the normal cadence (above) has taken over from here.
+  delete from due_dates d
+  where d.client_id = p_client
+    and d.computed_from_event_id is null
+    and exists (
+      select 1 from contact_events e
+      where e.client_id = p_client and e.type <> 'admin'
     );
 end $$;
 
@@ -227,6 +241,20 @@ begin
   update due_dates set snoozed_until = p_until, updated_at = now()
     where client_id = p_client and type = p_type;
   perform fn_rebuild_client_tasks(p_client);
+end $$;
+
+-- Plan initial outreach: insert first-touch call placeholders for the given
+-- clients (one per item, no backing event). The app computes the paced dates
+-- and passes them as [{ client_id, due_date }]. Skips clients who already
+-- have a call due date so it's safe to re-run.
+create or replace function plan_outreach(p_items jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into due_dates (client_id, type, due_date, computed_from_event_id)
+  select (item->>'client_id')::uuid, 'call'::touch_type, (item->>'due_date')::date, null
+  from jsonb_array_elements(p_items) as item
+  on conflict (client_id, type) do nothing;
+  perform rebuild_tasks();
 end $$;
 
 -- Recompute everything (used after service model edits).

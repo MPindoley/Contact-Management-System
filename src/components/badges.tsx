@@ -110,6 +110,18 @@ export function ScorePill({ score }: { score: number }) {
   );
 }
 
+/** Marks a first-touch with a never-contacted household. */
+export function OutreachBadge() {
+  return (
+    <span
+      title="First outreach — this household hasn't been contacted yet"
+      className="inline-flex items-center gap-1 rounded-md bg-gold-100 px-1.5 py-0.5 text-[11px] font-semibold text-gold-800 ring-1 ring-gold-300 ring-inset"
+    >
+      ✦ First outreach
+    </span>
+  );
+}
+
 /** "due today" / "12 days overdue" / "due in 5 days", color-coded. */
 export function DuePhrase({ dueDate, today }: { dueDate: string; today: string }) {
   const cls =

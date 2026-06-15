@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { useLogContact } from "../components/LogContactModal";
-import { clientsById, openTasks } from "../lib/selectors";
+import { clientsById, openTasks, outreachKeys } from "../lib/selectors";
 import {
   clientInScope,
   scopeFor,
@@ -17,8 +17,9 @@ import {
   type TouchType,
 } from "../types";
 import { formatShort } from "../lib/dates";
-import { AdvisorChip, DuePhrase, PriorityPill, TierBadge, TypeChip } from "../components/badges";
+import { AdvisorChip, DuePhrase, OutreachBadge, PriorityPill, TierBadge, TypeChip } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
+import { PhoneLink } from "../components/PhoneLink";
 import { SnoozeButton } from "../components/SnoozeButton";
 import { Button, Input, Select } from "../components/ui";
 import { CheckCircleIcon, SearchIcon } from "../components/icons";
@@ -86,6 +87,8 @@ export function ActionQueue() {
   }, [data, currentUser, advisorFilter, tierFilter, typeFilter, search, sort]);
 
   if (!data || !currentUser) return null;
+
+  const outreach = outreachKeys(data.dueDates);
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
@@ -217,7 +220,15 @@ export function ActionQueue() {
                   <td className="px-4 py-3">
                     <PriorityPill priority={task.priority} />
                   </td>
-                  <td className="px-4 py-3 font-semibold">{client.householdName}</td>
+                  <td className="px-4 py-3">
+                    <span className="flex items-center gap-2 font-semibold">
+                      {client.householdName}
+                      {outreach.has(`${task.clientId}:${task.type}`) && <OutreachBadge />}
+                    </span>
+                    {task.type === "call" && client.phone && (
+                      <PhoneLink phone={client.phone} className="mt-0.5 text-[13px]" />
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <TierBadge tier={client.tier} />
                   </td>

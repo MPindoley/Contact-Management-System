@@ -24,6 +24,7 @@ export interface Client {
   assignedAdvisor: AdvisorAssignment;
   tier: Tier;
   active: boolean;
+  phone: string | null;
   redtailId: string | null;
   createdAt: string;
 }
@@ -97,6 +98,7 @@ export interface AddClientInput {
   householdName: string;
   assignedAdvisor: AdvisorAssignment;
   tier: Tier;
+  phone: string | null;
   redtailId: string | null;
   // Seeds the service clock — "when did you last actually touch this client?"
   lastMeetingDate: string | null;
@@ -108,6 +110,7 @@ export interface UpdateClientInput {
   assignedAdvisor?: AdvisorAssignment;
   tier?: Tier;
   active?: boolean;
+  phone?: string | null;
 }
 
 export const ADVISOR_LABELS: Record<AdvisorAssignment, string> = {

@@ -17,6 +17,15 @@ Open **SQL Editor** in the Supabase dashboard, paste the contents of
 This creates the six tables, the service-engine triggers, the tier rules
 (A: 90/30, B: 365/90, C: 365/180), and the three user profiles.
 
+### Already set up? Run the upgrade instead
+
+If your database already has the original schema (and data), **don't** re-run
+`0001_init.sql` — it uses `create table` and would error. Instead paste and run
+[`migrations/0002_upgrade.sql`](migrations/0002_upgrade.sql). It's fully
+idempotent (safe to run any number of times) and brings an existing install up
+to date with every feature added after first setup: snooze, initial outreach,
+and client phone numbers. Re-run it whenever you get an updated build.
+
 ## 3. Wire up the people
 
 Set each person's email so their first sign-in auto-links to their profile:
