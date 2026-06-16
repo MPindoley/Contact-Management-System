@@ -63,6 +63,7 @@ interface AppContextValue {
   snoozeTouch(clientId: string, type: TouchType, untilDate: string | null): Promise<void>;
   planOutreach(items: Array<{ clientId: string; dueDate: string }>): Promise<void>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<void>;
+  deleteClient(clientId: string): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
   addProspect(input: AddProspectInput): Promise<Prospect | null>;
   updateProspect(prospectId: string, patch: UpdateProspectInput): Promise<void>;
@@ -319,6 +320,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  const deleteClient = useCallback(
+    (clientId: string) => run(() => adapter.deleteClient(clientId)),
+    [adapter, run],
+  );
+
   const updateServiceModel = useCallback(
     (model: ServiceModel) => run(() => adapter.updateServiceModel(model)),
     [adapter, run],
@@ -385,6 +391,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       snoozeTouch,
       planOutreach,
       updateClient,
+      deleteClient,
       updateServiceModel,
       addProspect,
       updateProspect,
@@ -398,7 +405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       mode, authReady, currentUser, signInDemo, signInSupabase, signUpSupabase, signOut,
       data, loading, busy, error, today, refresh,
       logContact, addClient, importClients, updateContactEvent, deleteContactEvent, snoozeTouch,
-      planOutreach, updateClient, updateServiceModel,
+      planOutreach, updateClient, deleteClient, updateServiceModel,
       addProspect, updateProspect, deleteProspect, logProspectContact, deleteProspectEvent,
       rebuildQueue, resetDemo,
     ],

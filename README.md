@@ -137,6 +137,10 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
   Logging the first real call converts the household to its normal cadence;
   these placeholders survive service-model edits but never overwrite real
   history. Flagged with a gold "First outreach" badge until contacted.
+- **Deactivate or delete a household** — Edit a client to pause them (kept,
+  but off the schedule and out of the queue) or **Delete household** to erase
+  them and all their contact history for good (a confirm guards it). Deleting
+  cascades — events, due dates, and tasks all go with them.
 - **Fix & undo** — hover any touch on a Client Profile to edit or delete it;
   the due date reflows through the same engine, so a mis-logged date never
   leaves a stale reminder.

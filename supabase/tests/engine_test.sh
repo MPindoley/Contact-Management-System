@@ -309,6 +309,32 @@ begin
   assert n = 1, 'voicemail must NOT settle the call task';
 end $$;
 
+-- Deleting a client erases its contact events, due dates, and tasks (cascade).
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('88888888-8888-8888-8888-888888888888', 'Delete Me Household', 'matt', 'A');
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('88888888-8888-8888-8888-888888888888', 'matt', 'call', current_date - 40);
+
+do $$
+declare n int;
+begin
+  select count(*) into n from due_dates where client_id = '88888888-8888-8888-8888-888888888888';
+  assert n >= 1, 'client has a due date before delete';
+end $$;
+
+delete from clients where id = '88888888-8888-8888-8888-888888888888';
+
+do $$
+declare n int;
+begin
+  select count(*) into n from contact_events where client_id = '88888888-8888-8888-8888-888888888888';
+  assert n = 0, 'contact events cascade-deleted';
+  select count(*) into n from due_dates where client_id = '88888888-8888-8888-8888-888888888888';
+  assert n = 0, 'due dates cascade-deleted';
+  select count(*) into n from tasks where client_id = '88888888-8888-8888-8888-888888888888';
+  assert n = 0, 'tasks cascade-deleted';
+end $$;
+
 -- Prospects island: completely independent of the client engine.
 insert into prospects (id, name, assigned_advisor, phone, status)
   values ('77777777-7777-7777-7777-777777777777', 'Test Prospect', 'matt', '(419) 555-0000', 'new');

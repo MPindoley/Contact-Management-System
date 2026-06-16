@@ -25,7 +25,7 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
 }
 
 function ClientForm({ onClose, client }: { onClose: () => void; client?: Client }) {
-  const { data, addClient, updateClient, busy } = useApp();
+  const { data, addClient, updateClient, deleteClient, busy } = useApp();
   const toast = useToast();
   const navigate = useNavigate();
   const editing = Boolean(client);
@@ -38,6 +38,19 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
   const [redtailId, setRedtailId] = useState(client?.redtailId ?? "");
   const [lastMeeting, setLastMeeting] = useState(todayISO());
   const [lastCall, setLastCall] = useState(todayISO());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  async function remove() {
+    if (!client) return;
+    try {
+      await deleteClient(client.id);
+      toast.push(`${client.householdName} deleted — household and history erased.`, "info");
+      onClose();
+      navigate("/clients");
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Couldn't delete the household.", "error");
+    }
+  }
 
   const model = data ? modelFor(data.serviceModels, tier) : null;
   const cadence = model
@@ -171,15 +184,45 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           </>
         )}
 
-        <div className="flex items-center justify-end gap-2 pt-1">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" type="submit" disabled={!name.trim() || busy}>
-            {busy && <Spinner className="size-3.5 border-white/40 border-t-white" />}
-            {editing ? "Save changes" : "Add household"}
-          </Button>
-        </div>
+        {confirmingDelete && client ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-clay-200 bg-clay-50 px-3 py-2.5">
+            <span className="text-sm text-clay-900">
+              Permanently delete {client.householdName} and all its contact history? This can't be
+              undone.
+            </span>
+            <div className="flex shrink-0 gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)}>
+                Keep
+              </Button>
+              <Button size="sm" variant="danger" onClick={() => void remove()} disabled={busy}>
+                Delete
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 pt-1">
+            {editing ? (
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmingDelete(true)}
+                className="text-clay-700 hover:bg-clay-50"
+              >
+                Delete household
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" disabled={!name.trim() || busy}>
+                {busy && <Spinner className="size-3.5 border-white/40 border-t-white" />}
+                {editing ? "Save changes" : "Add household"}
+              </Button>
+            </div>
+          </div>
+        )}
       </form>
     </Modal>
   );

@@ -444,6 +444,9 @@ create policy "authenticated read tasks"   on tasks          for select to authe
 create policy "authenticated all prospects"       on prospects       for all to authenticated using (true) with check (true);
 create policy "authenticated all prospect events" on prospect_events for all to authenticated using (true) with check (true);
 
+-- Base table privileges (RLS above still decides which rows are visible).
+grant select, insert, update, delete on all tables in schema public to authenticated;
+
 -- ============================================================================
 -- Realtime — broadcast row changes so every signed-in teammate's screen
 -- converges live. (Guarded: the publication only exists on Supabase.)

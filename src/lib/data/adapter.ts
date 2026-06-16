@@ -36,6 +36,8 @@ export interface DataAdapter {
   /** Schedule first-touch calls for never-contacted clients (Phase: outreach). */
   planOutreach(items: Array<{ clientId: string; dueDate: string }>): Promise<DataSnapshot>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<DataSnapshot>;
+  /** Permanently delete a household and all its contact history. */
+  deleteClient(clientId: string): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
 
   // --- Prospects (separate island; never touches client data) ---

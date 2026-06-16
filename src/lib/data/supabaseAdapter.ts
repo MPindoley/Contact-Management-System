@@ -413,6 +413,13 @@ export function createSupabaseAdapter(): DataAdapter {
       return fetchSnapshot();
     },
 
+    async deleteClient(clientId: string) {
+      // contact_events, due_dates and tasks cascade-delete in the database.
+      const { error } = await db.from("clients").delete().eq("id", clientId);
+      if (error) throw new Error(`Deleting client: ${error.message}`);
+      return fetchSnapshot();
+    },
+
     async updateServiceModel(model: ServiceModel) {
       // The service_models trigger recomputes every due date and task.
       const { error } = await db

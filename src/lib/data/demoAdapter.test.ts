@@ -165,6 +165,19 @@ describe("demo adapter — full service loop", () => {
     ).toBe(true);
   });
 
+  it("deleteClient erases the household and all its history", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    const before = await adapter.load();
+    const victim = before.clients[0];
+    expect(before.contactEvents.some((e) => e.clientId === victim.id)).toBe(true);
+
+    const after = await adapter.deleteClient(victim.id);
+    expect(after.clients.some((c) => c.id === victim.id)).toBe(false);
+    expect(after.contactEvents.some((e) => e.clientId === victim.id)).toBe(false);
+    expect(after.dueDates.some((d) => d.clientId === victim.id)).toBe(false);
+    expect(after.tasks.some((t) => t.clientId === victim.id)).toBe(false);
+  });
+
   it("persists across adapter instances via storage", async () => {
     const storage = memoryStorage();
     const first = createDemoAdapter(storage);

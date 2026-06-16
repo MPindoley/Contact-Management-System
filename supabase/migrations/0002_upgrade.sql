@@ -59,6 +59,11 @@ create policy "authenticated all prospects" on prospects for all to authenticate
 drop policy if exists "authenticated all prospect events" on prospect_events;
 create policy "authenticated all prospect events" on prospect_events for all to authenticated using (true) with check (true);
 
+-- Table-level privileges. RLS still gates which rows are visible, but the
+-- role needs the base grant first (tables added via the SQL editor don't
+-- always inherit Supabase's default grants — this makes it explicit).
+grant select, insert, update, delete on all tables in schema public to authenticated;
+
 -- Service engine: recompute now preserves first-outreach placeholders and
 -- clears snooze on a fresh contact ------------------------------------------
 create or replace function fn_recompute_client_due_dates(p_client uuid) returns void

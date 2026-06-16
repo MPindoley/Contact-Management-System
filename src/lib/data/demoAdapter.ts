@@ -312,6 +312,17 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       return snapshot();
     },
 
+    async deleteClient(clientId: string) {
+      const s = ensureLoaded();
+      // Erase the household and everything that hangs off it.
+      s.snapshot.clients = s.snapshot.clients.filter((c) => c.id !== clientId);
+      s.snapshot.contactEvents = s.snapshot.contactEvents.filter((e) => e.clientId !== clientId);
+      s.snapshot.dueDates = s.snapshot.dueDates.filter((d) => d.clientId !== clientId);
+      s.snapshot.tasks = s.snapshot.tasks.filter((t) => t.clientId !== clientId);
+      persist();
+      return snapshot();
+    },
+
     async updateServiceModel(model: ServiceModel) {
       const s = ensureLoaded();
       s.snapshot.serviceModels = s.snapshot.serviceModels.map((m) =>
