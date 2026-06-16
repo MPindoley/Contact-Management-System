@@ -14,14 +14,18 @@ import {
 } from "react";
 import type {
   AddClientInput,
+  AddProspectInput,
   Client,
   DataSnapshot,
   DueDate,
   LogContactInput,
+  LogProspectInput,
+  Prospect,
   ServiceModel,
   TouchType,
   UpdateClientInput,
   UpdateContactInput,
+  UpdateProspectInput,
   User,
 } from "../types";
 import type { DataAdapter } from "./data/adapter";
@@ -60,6 +64,11 @@ interface AppContextValue {
   planOutreach(items: Array<{ clientId: string; dueDate: string }>): Promise<void>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
+  addProspect(input: AddProspectInput): Promise<Prospect | null>;
+  updateProspect(prospectId: string, patch: UpdateProspectInput): Promise<void>;
+  deleteProspect(prospectId: string): Promise<void>;
+  logProspectContact(input: LogProspectInput): Promise<void>;
+  deleteProspectEvent(eventId: string): Promise<void>;
   rebuildQueue(): Promise<void>;
   resetDemo(): Promise<void>;
 }
@@ -315,6 +324,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  const addProspect = useCallback(
+    (input: AddProspectInput) => {
+      const before = new Set((data?.prospects ?? []).map((p) => p.id));
+      return run(
+        () => adapter.addProspect(input),
+        (s) => s.prospects.find((p) => !before.has(p.id)) ?? null,
+      );
+    },
+    [adapter, run, data],
+  );
+
+  const updateProspect = useCallback(
+    (prospectId: string, patch: UpdateProspectInput) =>
+      run(() => adapter.updateProspect(prospectId, patch)),
+    [adapter, run],
+  );
+
+  const deleteProspect = useCallback(
+    (prospectId: string) => run(() => adapter.deleteProspect(prospectId)),
+    [adapter, run],
+  );
+
+  const logProspectContact = useCallback(
+    (input: LogProspectInput) => run(() => adapter.logProspectContact(input)),
+    [adapter, run],
+  );
+
+  const deleteProspectEvent = useCallback(
+    (eventId: string) => run(() => adapter.deleteProspectEvent(eventId)),
+    [adapter, run],
+  );
+
   const rebuildQueue = useCallback(() => run(() => adapter.rebuildQueue()), [adapter, run]);
 
   const resetDemo = useCallback(async () => {
@@ -345,6 +386,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       planOutreach,
       updateClient,
       updateServiceModel,
+      addProspect,
+      updateProspect,
+      deleteProspect,
+      logProspectContact,
+      deleteProspectEvent,
       rebuildQueue,
       resetDemo,
     }),
@@ -352,7 +398,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       mode, authReady, currentUser, signInDemo, signInSupabase, signUpSupabase, signOut,
       data, loading, busy, error, today, refresh,
       logContact, addClient, importClients, updateContactEvent, deleteContactEvent, snoozeTouch,
-      planOutreach, updateClient, updateServiceModel, rebuildQueue, resetDemo,
+      planOutreach, updateClient, updateServiceModel,
+      addProspect, updateProspect, deleteProspect, logProspectContact, deleteProspectEvent,
+      rebuildQueue, resetDemo,
     ],
   );
 

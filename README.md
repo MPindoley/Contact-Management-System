@@ -34,7 +34,10 @@ npm run build   # typecheck + production bundle
 
 ## How it works
 
-### The six tables
+### The tables
+
+Six tables run the client engine; two more (`prospects`, `prospect_events`)
+are a separate island for not-yet-clients that never touches the engine.
 
 | Table | What it holds |
 | --- | --- |
@@ -107,6 +110,17 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 
 ### Daily-use touches
 
+- **Voicemail tracking** — log a "Voicemail" when you call and don't connect.
+  It's recorded as an attempt (shown in violet in the history, counted on the
+  call card as "N voicemails since you last reached them") but it **never
+  resets the call clock or touches any score** — the call stays on your list.
+  Pick "try them again in 3 days" and it snoozes off today and comes back.
+- **Prospects** — a separate **Prospects** tab for people you're calling who
+  aren't clients yet. Their own pipeline (New → Working → Appointment →
+  Converted/Lost), attempt + voicemail tracking, follow-up dates, tap-to-call,
+  and a one-click Convert to client. **Completely isolated** — prospects live
+  in their own tables and never feed due dates, tasks, scores, or the firm
+  report, so they can't move a single client graph.
 - **Phone numbers** — store a number per household (manual form or a mapped
   CSV column). It shows as a tap-to-call link on call cards, the queue, and
   the profile — so when a call comes due, the number's right there and dials

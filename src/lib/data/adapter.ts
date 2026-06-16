@@ -1,11 +1,14 @@
 import type {
   AddClientInput,
+  AddProspectInput,
   DataSnapshot,
   LogContactInput,
+  LogProspectInput,
   ServiceModel,
   TouchType,
   UpdateClientInput,
   UpdateContactInput,
+  UpdateProspectInput,
 } from "../../types";
 
 /**
@@ -34,6 +37,14 @@ export interface DataAdapter {
   planOutreach(items: Array<{ clientId: string; dueDate: string }>): Promise<DataSnapshot>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
+
+  // --- Prospects (separate island; never touches client data) ---
+  addProspect(input: AddProspectInput): Promise<DataSnapshot>;
+  updateProspect(prospectId: string, patch: UpdateProspectInput): Promise<DataSnapshot>;
+  deleteProspect(prospectId: string): Promise<DataSnapshot>;
+  logProspectContact(input: LogProspectInput): Promise<DataSnapshot>;
+  deleteProspectEvent(eventId: string): Promise<DataSnapshot>;
+
   /** Re-run the nightly rebuild on demand (the "6am job, now" button). */
   rebuildQueue(): Promise<DataSnapshot>;
   /** Demo only: wipe and reseed. */

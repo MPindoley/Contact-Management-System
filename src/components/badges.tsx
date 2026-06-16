@@ -1,10 +1,10 @@
 // Domain badges: tier, advisor, contact type, priority, score.
 
-import type { AdvisorAssignment, ContactType, Priority, Tier } from "../types";
-import { ADVISOR_LABELS, CONTACT_TYPE_LABELS } from "../types";
+import type { AdvisorAssignment, ContactType, Priority, ProspectStatus, Tier } from "../types";
+import { ADVISOR_LABELS, CONTACT_TYPE_LABELS, PROSPECT_STATUS_LABELS } from "../types";
 import { scoreColor, type ScoreColor } from "../engine/serviceEngine";
 import { dueLabel } from "../lib/dates";
-import { CalendarIcon, ClipboardIcon, PhoneIcon } from "./icons";
+import { CalendarIcon, ClipboardIcon, PhoneIcon, VoicemailIcon } from "./icons";
 
 const TIER_STYLES: Record<Tier, string> = {
   A: "bg-gold-100 text-gold-800 ring-gold-300",
@@ -47,6 +47,7 @@ export function AdvisorChip({ advisor }: { advisor: AdvisorAssignment }) {
 const TYPE_META: Record<ContactType, { className: string; Icon: typeof PhoneIcon }> = {
   call: { className: "bg-sky-50 text-sky-800 ring-sky-200", Icon: PhoneIcon },
   meeting: { className: "bg-pine-50 text-pine-800 ring-pine-200", Icon: CalendarIcon },
+  voicemail: { className: "bg-violet-50 text-violet-800 ring-violet-200", Icon: VoicemailIcon },
   admin: { className: "bg-stone-100 text-stone-600 ring-stone-200", Icon: ClipboardIcon },
 };
 
@@ -106,6 +107,24 @@ export function ScorePill({ score }: { score: number }) {
     >
       <span className={`size-1.5 rounded-full ${SCORE_DOT_STYLES[color]}`} />
       {score}%
+    </span>
+  );
+}
+
+const PROSPECT_STATUS_STYLES: Record<ProspectStatus, string> = {
+  new: "bg-sky-100 text-sky-800",
+  working: "bg-amber-100 text-amber-800",
+  appointment: "bg-pine-100 text-pine-800",
+  converted: "bg-violet-100 text-violet-800",
+  lost: "bg-stone-200 text-stone-600",
+};
+
+export function ProspectStatusBadge({ status }: { status: ProspectStatus }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${PROSPECT_STATUS_STYLES[status]}`}
+    >
+      {PROSPECT_STATUS_LABELS[status]}
     </span>
   );
 }

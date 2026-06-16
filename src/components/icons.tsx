@@ -81,6 +81,36 @@ export const PhoneIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const VoicemailIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="6" cy="12" r="4" />
+    <circle cx="18" cy="12" r="4" />
+    <line x1="6" y1="16" x2="18" y2="16" />
+  </Icon>
+);
+
+export const MailIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m2 7 10 6 10-6" />
+  </Icon>
+);
+
+export const NoteIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M11 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+  </Icon>
+);
+
+export const TargetIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" />
+  </Icon>
+);
+
 export const CalendarIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M8 2v4" />

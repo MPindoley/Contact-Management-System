@@ -278,5 +278,52 @@ begin
   assert u.auth_user_id = '33333333-3333-3333-3333-333333333333', 'linked when email set after signup';
 end $$;
 
+-- Voicemail is tracked but never moves the service clock or settles a task.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('66666666-6666-6666-6666-666666666666', 'Voicemail Household', 'matt', 'A');
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('66666666-6666-6666-6666-666666666666', 'matt', 'call', current_date - 35);
+
+do $$
+declare d record; n int;
+begin
+  select * into strict d from due_dates
+    where client_id = '66666666-6666-6666-6666-666666666666' and type = 'call';
+  assert d.due_date = current_date - 5, 'call due 5d ago before voicemail, got ' || d.due_date;
+  select count(*) into n from tasks
+    where client_id = '66666666-6666-6666-6666-666666666666' and type = 'call' and status = 'open';
+  assert n = 1, 'overdue call task present';
+end $$;
+
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('66666666-6666-6666-6666-666666666666', 'matt', 'voicemail', current_date);
+
+do $$
+declare d record; n int;
+begin
+  select * into strict d from due_dates
+    where client_id = '66666666-6666-6666-6666-666666666666' and type = 'call';
+  assert d.due_date = current_date - 5, 'voicemail must NOT move the call clock, got ' || d.due_date;
+  select count(*) into n from tasks
+    where client_id = '66666666-6666-6666-6666-666666666666' and type = 'call' and status = 'open';
+  assert n = 1, 'voicemail must NOT settle the call task';
+end $$;
+
+-- Prospects island: completely independent of the client engine.
+insert into prospects (id, name, assigned_advisor, phone, status)
+  values ('77777777-7777-7777-7777-777777777777', 'Test Prospect', 'matt', '(419) 555-0000', 'new');
+insert into prospect_events (prospect_id, advisor, type, event_date, notes)
+  values ('77777777-7777-7777-7777-777777777777', 'matt', 'voicemail', current_date, 'Left a message.');
+
+do $$
+declare n int;
+begin
+  select count(*) into n from prospect_events where prospect_id = '77777777-7777-7777-7777-777777777777';
+  assert n = 1, 'prospect event recorded';
+  -- A prospect must never create a client, due date, or task.
+  select count(*) into n from due_dates d join prospects p on p.id::text = d.client_id::text;
+  assert n = 0, 'prospects never leak into due_dates';
+end $$;
+
 select 'ALL_SQL_ASSERTIONS_PASSED' as result;
 SQL

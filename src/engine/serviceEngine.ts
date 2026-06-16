@@ -13,6 +13,7 @@ import type {
   Tier,
   TouchType,
 } from "../types";
+import { isMeaningfulContact } from "../types";
 import { addDays, diffDays, monthKey } from "../lib/dates";
 
 /** Tasks surface this many days before they are due (matches fn_task_horizon). */
@@ -203,7 +204,7 @@ export function clientScore(
 ): ScoreBreakdown {
   const model = modelFor(models, client.tier);
   const windowStart = addDays(today, -365);
-  const events = allEvents.filter((e) => e.clientId === client.id && e.type !== "admin");
+  const events = allEvents.filter((e) => e.clientId === client.id && isMeaningfulContact(e.type));
 
   const earliest = events.reduce<string | null>(
     (min, e) => (min === null || e.eventDate < min ? e.eventDate : min),
@@ -283,7 +284,7 @@ export function monthlyProgress(
 ): { completed: number; target: number } {
   const month = monthKey(today);
   const completed = allEvents.filter(
-    (e) => e.type !== "admin" && monthKey(e.eventDate) === month && e.eventDate <= today,
+    (e) => isMeaningfulContact(e.type) && monthKey(e.eventDate) === month && e.eventDate <= today,
   ).length;
 
   const annualTotal = clients

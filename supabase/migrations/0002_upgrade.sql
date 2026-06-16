@@ -14,6 +14,51 @@
 alter table clients   add column if not exists phone text;
 alter table due_dates add column if not exists snoozed_until date;
 
+-- Voicemail contact type (tracked, but never moves the service clock) ---------
+alter type contact_type add value if not exists 'voicemail';
+
+-- Prospects island: a separate area for not-yet-clients. No links to the
+-- client tables, no engine triggers — it can't affect any client graph. ------
+do $$ begin
+  create type prospect_status as enum ('new', 'working', 'appointment', 'converted', 'lost');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type prospect_event_type as enum ('call', 'voicemail', 'meeting', 'email', 'note');
+exception when duplicate_object then null; end $$;
+
+create table if not exists prospects (
+  id               uuid primary key default gen_random_uuid(),
+  name             text not null,
+  assigned_advisor advisor_assignment not null default 'matt',
+  phone            text,
+  status           prospect_status not null default 'new',
+  notes            text,
+  next_follow_up   date,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+create table if not exists prospect_events (
+  id           uuid primary key default gen_random_uuid(),
+  prospect_id  uuid not null references prospects (id) on delete cascade,
+  advisor      advisor_assignment not null check (advisor <> 'joint'),
+  type         prospect_event_type not null,
+  event_date   date not null default current_date,
+  notes        text,
+  created_at   timestamptz not null default now()
+);
+create index if not exists prospect_events_idx on prospect_events (prospect_id, event_date desc);
+
+drop trigger if exists prospects_touch on prospects;
+create trigger prospects_touch before update on prospects for each row execute function set_updated_at();
+
+alter table prospects       enable row level security;
+alter table prospect_events enable row level security;
+drop policy if exists "authenticated all prospects" on prospects;
+create policy "authenticated all prospects" on prospects for all to authenticated using (true) with check (true);
+drop policy if exists "authenticated all prospect events" on prospect_events;
+create policy "authenticated all prospect events" on prospect_events for all to authenticated using (true) with check (true);
+
 -- Service engine: recompute now preserves first-outreach placeholders and
 -- clears snooze on a fresh contact ------------------------------------------
 create or replace function fn_recompute_client_due_dates(p_client uuid) returns void
@@ -32,7 +77,7 @@ begin
       e.event_date,
       e.id as event_id
     from contact_events e
-    where e.client_id = p_client and e.type <> 'admin'
+    where e.client_id = p_client and e.type in ('meeting', 'call')
     order by e.type, e.event_date desc, e.created_at desc
   )
   insert into due_dates (client_id, type, due_date, computed_from_event_id, updated_at)
@@ -58,7 +103,7 @@ begin
     and d.computed_from_event_id is not null
     and not exists (
       select 1 from contact_events e
-      where e.client_id = p_client and e.type <> 'admin' and e.type::text = d.type::text
+      where e.client_id = p_client and e.type in ('meeting', 'call') and e.type::text = d.type::text
     );
 
   delete from due_dates d
@@ -66,7 +111,7 @@ begin
     and d.computed_from_event_id is null
     and exists (
       select 1 from contact_events e
-      where e.client_id = p_client and e.type <> 'admin'
+      where e.client_id = p_client and e.type in ('meeting', 'call')
     );
 end $$;
 
@@ -131,7 +176,7 @@ declare
   t text;
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    foreach t in array array['clients','contact_events','due_dates','tasks','service_models','users'] loop
+    foreach t in array array['clients','contact_events','due_dates','tasks','service_models','users','prospects','prospect_events'] loop
       if not exists (
         select 1 from pg_publication_tables
         where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
@@ -141,3 +186,8 @@ begin
     end loop;
   end if;
 end $$;
+
+-- Tell PostgREST (the API layer) to reload, so the new RPCs are callable
+-- immediately instead of erroring with "not found in the schema cache".
+notify pgrst, 'reload schema';
+

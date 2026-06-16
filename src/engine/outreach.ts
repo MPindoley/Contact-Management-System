@@ -9,6 +9,7 @@
 // ones, so most of the backlog stays out of sight until its day approaches.
 
 import type { Client, ContactEvent, DueDate, Tier } from "../types";
+import { isMeaningfulContact } from "../types";
 import { addDays, nextWeekday } from "../lib/dates";
 
 const TIER_ORDER: Record<Tier, number> = { A: 0, B: 1, C: 2 };
@@ -35,7 +36,9 @@ export function outreachCandidates(
   events: ContactEvent[],
   dueDates: DueDate[],
 ): Client[] {
-  const contacted = new Set(events.filter((e) => e.type !== "admin").map((e) => e.clientId));
+  const contacted = new Set(
+    events.filter((e) => isMeaningfulContact(e.type)).map((e) => e.clientId),
+  );
   const hasDue = new Set(dueDates.map((d) => d.clientId));
   return clients
     .filter((c) => c.active && !contacted.has(c.id) && !hasDue.has(c.id))

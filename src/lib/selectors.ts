@@ -1,6 +1,7 @@
 // Tiny pure helpers for deriving view data from the snapshot.
 
 import type { Client, ContactEvent, DataSnapshot, DueDate, Task } from "../types";
+import { isMeaningfulContact } from "../types";
 
 export function clientsById(data: DataSnapshot): Map<string, Client> {
   return new Map(data.clients.map((c) => [c.id, c]));
@@ -9,7 +10,7 @@ export function clientsById(data: DataSnapshot): Map<string, Client> {
 /** Latest meaningful (non-admin) touch for a client, if any. */
 export function latestContactFor(events: ContactEvent[], clientId: string): ContactEvent | null {
   return events
-    .filter((e) => e.clientId === clientId && e.type !== "admin")
+    .filter((e) => e.clientId === clientId && isMeaningfulContact(e.type))
     .reduce<ContactEvent | null>((best, e) => {
       if (!best) return e;
       if (e.eventDate > best.eventDate) return e;

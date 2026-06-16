@@ -17,10 +17,13 @@ create extension if not exists pgcrypto;
 create type advisor_assignment as enum ('matt', 'advisor_b', 'joint');
 create type user_role         as enum ('advisor', 'assistant');
 create type client_tier       as enum ('A', 'B', 'C');
-create type contact_type      as enum ('meeting', 'call', 'admin');
+create type contact_type      as enum ('meeting', 'call', 'voicemail', 'admin');
 create type touch_type        as enum ('meeting', 'call');
 create type task_priority     as enum ('high', 'medium', 'low');
 create type task_status       as enum ('open', 'done');
+-- Prospects are a separate island from the client service engine.
+create type prospect_status     as enum ('new', 'working', 'appointment', 'converted', 'lost');
+create type prospect_event_type as enum ('call', 'voicemail', 'meeting', 'email', 'note');
 
 -- ---------------------------------------------------------------------------
 -- users — the three people in the firm. Linked to Supabase Auth by email the
@@ -118,6 +121,35 @@ create table tasks (
 create unique index tasks_one_open_per_touch on tasks (client_id, type) where status = 'open';
 create index tasks_open_idx on tasks (status, due_date) where status = 'open';
 
+-- ---------------------------------------------------------------------------
+-- prospects — people being called who aren't clients yet. A DELIBERATELY
+-- SEPARATE island: no foreign keys to clients, no engine triggers, never
+-- read by due dates, tasks, scores, or the firm report. Tracking only.
+-- ---------------------------------------------------------------------------
+create table prospects (
+  id               uuid primary key default gen_random_uuid(),
+  name             text not null,
+  assigned_advisor advisor_assignment not null default 'matt',
+  phone            text,
+  status           prospect_status not null default 'new',
+  notes            text,
+  next_follow_up   date,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+create table prospect_events (
+  id           uuid primary key default gen_random_uuid(),
+  prospect_id  uuid not null references prospects (id) on delete cascade,
+  advisor      advisor_assignment not null check (advisor <> 'joint'),
+  type         prospect_event_type not null,
+  event_date   date not null default current_date,
+  notes        text,
+  created_at   timestamptz not null default now()
+);
+
+create index prospect_events_idx on prospect_events (prospect_id, event_date desc);
+
 -- ============================================================================
 -- Service engine
 -- ============================================================================
@@ -152,7 +184,7 @@ begin
       e.event_date,
       e.id as event_id
     from contact_events e
-    where e.client_id = p_client and e.type <> 'admin'
+    where e.client_id = p_client and e.type in ('meeting', 'call')
     order by e.type, e.event_date desc, e.created_at desc
   )
   insert into due_dates (client_id, type, due_date, computed_from_event_id, updated_at)
@@ -182,7 +214,7 @@ begin
     and not exists (
       select 1 from contact_events e
       where e.client_id = p_client
-        and e.type <> 'admin'
+        and e.type in ('meeting', 'call')
         and e.type::text = d.type::text
     );
 
@@ -193,7 +225,7 @@ begin
     and d.computed_from_event_id is null
     and exists (
       select 1 from contact_events e
-      where e.client_id = p_client and e.type <> 'admin'
+      where e.client_id = p_client and e.type in ('meeting', 'call')
     );
 end $$;
 
@@ -283,7 +315,7 @@ begin
     return old;
   end if;
 
-  if tg_op = 'INSERT' and new.type <> 'admin' then
+  if tg_op = 'INSERT' and new.type in ('meeting', 'call') then
     -- A completed touch settles the matching open task.
     update tasks
       set status = 'done'
@@ -345,6 +377,7 @@ end $$;
 
 create trigger clients_touch        before update on clients        for each row execute function set_updated_at();
 create trigger service_models_touch before update on service_models for each row execute function set_updated_at();
+create trigger prospects_touch      before update on prospects      for each row execute function set_updated_at();
 
 -- Link a Supabase Auth signup to its firm profile by email.
 create or replace function handle_new_auth_user() returns trigger
@@ -398,6 +431,8 @@ alter table service_models enable row level security;
 alter table contact_events enable row level security;
 alter table due_dates      enable row level security;
 alter table tasks          enable row level security;
+alter table prospects        enable row level security;
+alter table prospect_events  enable row level security;
 
 create policy "authenticated read users"   on users          for select to authenticated using (true);
 create policy "authenticated update users" on users          for update to authenticated using (true) with check (true);
@@ -406,6 +441,8 @@ create policy "authenticated all models"   on service_models for all    to authe
 create policy "authenticated all events"   on contact_events for all    to authenticated using (true) with check (true);
 create policy "authenticated read due"     on due_dates      for select to authenticated using (true);
 create policy "authenticated read tasks"   on tasks          for select to authenticated using (true);
+create policy "authenticated all prospects"       on prospects       for all to authenticated using (true) with check (true);
+create policy "authenticated all prospect events" on prospect_events for all to authenticated using (true) with check (true);
 
 -- ============================================================================
 -- Realtime — broadcast row changes so every signed-in teammate's screen
@@ -415,7 +452,8 @@ do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     alter publication supabase_realtime
-      add table clients, contact_events, due_dates, tasks, service_models, users;
+      add table clients, contact_events, due_dates, tasks, service_models, users,
+                prospects, prospect_events;
   end if;
 end $$;
 

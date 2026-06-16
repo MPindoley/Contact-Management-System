@@ -8,6 +8,8 @@ import { Dashboard } from "./screens/Dashboard";
 import { ActionQueue } from "./screens/ActionQueue";
 import { Clients } from "./screens/Clients";
 import { ImportClients } from "./screens/ImportClients";
+import { Prospects } from "./screens/Prospects";
+import { ProspectProfile } from "./screens/ProspectProfile";
 import { ClientProfile } from "./screens/ClientProfile";
 import { FirmReport } from "./screens/FirmReport";
 import { ServiceModels } from "./screens/ServiceModels";
@@ -60,6 +62,8 @@ export default function App() {
                 <Route path="clients" element={<Clients />} />
                 <Route path="clients/import" element={<ImportClients />} />
                 <Route path="clients/:clientId" element={<ClientProfile />} />
+                <Route path="prospects" element={<Prospects />} />
+                <Route path="prospects/:prospectId" element={<ProspectProfile />} />
                 <Route path="report" element={<FirmReport />} />
                 <Route path="settings/service-models" element={<ServiceModels />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

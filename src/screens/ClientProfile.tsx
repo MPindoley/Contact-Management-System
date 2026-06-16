@@ -15,7 +15,7 @@ import { EditContactModal } from "../components/EditContactModal";
 import { EmptyState } from "../components/EmptyState";
 import { PhoneLink } from "../components/PhoneLink";
 import { Button } from "../components/ui";
-import { CalendarIcon, ClockIcon, PhoneIcon, PlusIcon } from "../components/icons";
+import { CalendarIcon, ClockIcon, PhoneIcon, PlusIcon, VoicemailIcon } from "../components/icons";
 
 export function ClientProfile() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -45,6 +45,12 @@ export function ClientProfile() {
       else byMonth.set(key, [e]);
     }
 
+    // Voicemails since the last time they were actually reached (call/meeting).
+    const lastMeaningful = events.find((e) => e.type === "call" || e.type === "meeting");
+    const voicemailsSince = events.filter(
+      (e) => e.type === "voicemail" && (!lastMeaningful || e.eventDate >= lastMeaningful.eventDate),
+    ).length;
+
     return {
       model,
       meetingDue: dueDates.find((d) => d.type === "meeting") ?? null,
@@ -53,6 +59,7 @@ export function ClientProfile() {
       months: [...byMonth.entries()],
       recentCount: recent.length,
       olderCount: events.length - recent.length,
+      voicemailsSince,
       eventsById: new Map(events.map((e) => [e.id, e])),
     };
   }, [data, client, today]);
@@ -130,6 +137,7 @@ export function ClientProfile() {
               due={derived.callDue?.dueDate ?? null}
               basedOn={derived.callDue?.computedFromEventId ?? null}
               snoozedUntil={derived.callDue?.snoozedUntil ?? null}
+              voicemailsSince={derived.voicemailsSince}
               eventsById={derived.eventsById}
               today={today}
               active={client.active}
@@ -249,6 +257,7 @@ function DueCard({
   due,
   basedOn,
   snoozedUntil,
+  voicemailsSince = 0,
   eventsById,
   today,
   active,
@@ -259,6 +268,7 @@ function DueCard({
   due: string | null;
   basedOn: string | null;
   snoozedUntil: string | null;
+  voicemailsSince?: number;
   eventsById: Map<string, { eventDate: string }>;
   today: string;
   active: boolean;
@@ -308,6 +318,13 @@ function DueCard({
                 Un-snooze
               </button>
             </div>
+          )}
+          {type === "call" && voicemailsSince > 0 && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-violet-700">
+              <VoicemailIcon className="size-3.5" />
+              {voicemailsSince} voicemail{voicemailsSince === 1 ? "" : "s"} left since you last
+              reached them
+            </p>
           )}
         </div>
       ) : (

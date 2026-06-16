@@ -5,7 +5,7 @@ export type Tier = "A" | "B" | "C";
 export type AdvisorAssignment = "matt" | "advisor_b" | "joint";
 export type AdvisorKey = Exclude<AdvisorAssignment, "joint">;
 export type Role = "advisor" | "assistant";
-export type ContactType = "meeting" | "call" | "admin";
+export type ContactType = "meeting" | "call" | "voicemail" | "admin";
 export type TouchType = "meeting" | "call";
 export type Priority = "high" | "medium" | "low";
 export type TaskStatus = "open" | "done";
@@ -68,6 +68,36 @@ export interface Task {
   createdAt: string;
 }
 
+// ---------------------------------------------------------------------------
+// Prospects — a separate island for not-yet-clients. None of this feeds the
+// service engine, scores, or the firm report.
+// ---------------------------------------------------------------------------
+
+export type ProspectStatus = "new" | "working" | "appointment" | "converted" | "lost";
+export type ProspectEventType = "call" | "voicemail" | "meeting" | "email" | "note";
+
+export interface Prospect {
+  id: string;
+  name: string;
+  assignedAdvisor: AdvisorAssignment;
+  phone: string | null;
+  status: ProspectStatus;
+  notes: string | null;
+  nextFollowUp: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProspectEvent {
+  id: string;
+  prospectId: string;
+  advisor: AdvisorKey;
+  type: ProspectEventType;
+  eventDate: string;
+  notes: string | null;
+  createdAt: string;
+}
+
 export interface DataSnapshot {
   users: User[];
   clients: Client[];
@@ -75,7 +105,61 @@ export interface DataSnapshot {
   contactEvents: ContactEvent[];
   dueDates: DueDate[];
   tasks: Task[];
+  prospects: Prospect[];
+  prospectEvents: ProspectEvent[];
 }
+
+export interface AddProspectInput {
+  name: string;
+  assignedAdvisor: AdvisorAssignment;
+  phone: string | null;
+  status: ProspectStatus;
+  notes: string | null;
+  nextFollowUp: string | null;
+}
+
+export interface UpdateProspectInput {
+  name?: string;
+  assignedAdvisor?: AdvisorAssignment;
+  phone?: string | null;
+  status?: ProspectStatus;
+  notes?: string | null;
+  nextFollowUp?: string | null;
+}
+
+export interface LogProspectInput {
+  prospectId: string;
+  advisor: AdvisorKey;
+  type: ProspectEventType;
+  eventDate: string;
+  notes: string | null;
+  /** Optionally move the next-follow-up date in the same action. */
+  nextFollowUp?: string | null;
+}
+
+export const PROSPECT_STATUS_LABELS: Record<ProspectStatus, string> = {
+  new: "New",
+  working: "Working",
+  appointment: "Appointment set",
+  converted: "Converted",
+  lost: "Lost",
+};
+
+export const PROSPECT_EVENT_LABELS: Record<ProspectEventType, string> = {
+  call: "Call",
+  voicemail: "Voicemail",
+  meeting: "Meeting",
+  email: "Email",
+  note: "Note",
+};
+
+export const PROSPECT_STATUSES: ProspectStatus[] = [
+  "new",
+  "working",
+  "appointment",
+  "converted",
+  "lost",
+];
 
 export interface LogContactInput {
   clientId: string;
@@ -122,8 +206,18 @@ export const ADVISOR_LABELS: Record<AdvisorAssignment, string> = {
 export const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
   meeting: "Meeting",
   call: "Meaningful Call",
+  voicemail: "Voicemail",
   admin: "Admin",
 };
+
+/**
+ * Only meetings and meaningful calls drive the service engine — due dates,
+ * tasks, scores, "last contact", outreach. Voicemails and admin touches are
+ * tracked for the record but never move the clock or the graphs.
+ */
+export function isMeaningfulContact(type: ContactType): boolean {
+  return type === "meeting" || type === "call";
+}
 
 export const TOUCH_TYPE_LABELS: Record<TouchType, string> = {
   meeting: "Meeting",

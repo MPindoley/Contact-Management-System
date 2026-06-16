@@ -5,15 +5,20 @@
 
 import type {
   AddClientInput,
+  AddProspectInput,
   Client,
   ContactEvent,
   DataSnapshot,
   LogContactInput,
+  LogProspectInput,
+  Prospect,
   ServiceModel,
   TouchType,
   UpdateClientInput,
   UpdateContactInput,
+  UpdateProspectInput,
 } from "../../types";
+import { isMeaningfulContact } from "../../types";
 import type { DataAdapter } from "./adapter";
 import { todayISO } from "../dates";
 import {
@@ -102,7 +107,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
     // Preserve first-outreach placeholders (no source event) until the client
     // has been contacted for the first time; then the real cadence takes over.
     const hasContact = s.snapshot.contactEvents.some(
-      (e) => e.clientId === clientId && e.type !== "admin",
+      (e) => e.clientId === clientId && isMeaningfulContact(e.type),
     );
     const preservedOutreach = hasContact
       ? []
@@ -143,9 +148,10 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       };
       s.snapshot.contactEvents.push(event);
 
-      if (event.type !== "admin") {
-        // A completed touch settles the matching open task and resets the clock.
-        s.snapshot.tasks = settleTasks(s.snapshot.tasks, event.clientId, event.type);
+      if (isMeaningfulContact(event.type)) {
+        // A meaningful touch settles the matching open task and resets the clock.
+        // Voicemail / admin are tracked only — the task stays, the clock holds.
+        s.snapshot.tasks = settleTasks(s.snapshot.tasks, event.clientId, event.type as "meeting" | "call");
         recomputeClient(event.clientId);
       }
       rebuild(todayISO());
@@ -314,6 +320,81 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       // The rules changed — the whole book reflows.
       for (const client of s.snapshot.clients) recomputeClient(client.id);
       rebuild(todayISO());
+      return snapshot();
+    },
+
+    // --- Prospects (no engine interaction whatsoever) ---
+    async addProspect(input: AddProspectInput) {
+      const s = ensureLoaded();
+      const now = new Date().toISOString();
+      const prospect: Prospect = {
+        id: uid(),
+        name: input.name.trim(),
+        assignedAdvisor: input.assignedAdvisor,
+        phone: input.phone?.trim() || null,
+        status: input.status,
+        notes: input.notes?.trim() || null,
+        nextFollowUp: input.nextFollowUp || null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      s.snapshot.prospects.push(prospect);
+      persist();
+      return snapshot();
+    },
+
+    async updateProspect(prospectId: string, patch: UpdateProspectInput) {
+      const s = ensureLoaded();
+      const p = s.snapshot.prospects.find((x) => x.id === prospectId);
+      if (p) {
+        if (patch.name !== undefined) p.name = patch.name.trim();
+        if (patch.assignedAdvisor !== undefined) p.assignedAdvisor = patch.assignedAdvisor;
+        if (patch.phone !== undefined) p.phone = patch.phone?.trim() || null;
+        if (patch.status !== undefined) p.status = patch.status;
+        if (patch.notes !== undefined) p.notes = patch.notes?.trim() || null;
+        if (patch.nextFollowUp !== undefined) p.nextFollowUp = patch.nextFollowUp || null;
+        p.updatedAt = new Date().toISOString();
+        persist();
+      }
+      return snapshot();
+    },
+
+    async deleteProspect(prospectId: string) {
+      const s = ensureLoaded();
+      s.snapshot.prospects = s.snapshot.prospects.filter((x) => x.id !== prospectId);
+      s.snapshot.prospectEvents = s.snapshot.prospectEvents.filter((e) => e.prospectId !== prospectId);
+      persist();
+      return snapshot();
+    },
+
+    async logProspectContact(input: LogProspectInput) {
+      const s = ensureLoaded();
+      s.snapshot.prospectEvents.push({
+        id: uid(),
+        prospectId: input.prospectId,
+        advisor: input.advisor,
+        type: input.type,
+        eventDate: input.eventDate,
+        notes: input.notes?.trim() || null,
+        createdAt: new Date().toISOString(),
+      });
+      const p = s.snapshot.prospects.find((x) => x.id === input.prospectId);
+      if (p) {
+        if (input.nextFollowUp !== undefined) p.nextFollowUp = input.nextFollowUp || null;
+        // First touch nudges a brand-new prospect into "working".
+        if (p.status === "new" && (input.type === "call" || input.type === "voicemail" || input.type === "meeting")) {
+          p.status = "working";
+        }
+        p.updatedAt = new Date().toISOString();
+      }
+      persist();
+      return snapshot();
+    },
+
+    async deleteProspectEvent(eventId: string) {
+      const s = ensureLoaded();
+      s.snapshot.prospectEvents = s.snapshot.prospectEvents.filter((e) => e.id !== eventId);
+      persist();
       return snapshot();
     },
 

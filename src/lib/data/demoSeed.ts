@@ -3,7 +3,7 @@
 // it — a couple of touches due today, a spread of overdue items, and a few
 // things on the horizon. Deterministic (seeded PRNG), so resets are stable.
 
-import type { AdvisorAssignment, AdvisorKey, Client, ContactEvent, ContactType, DataSnapshot, ServiceModel, Tier, User } from "../../types";
+import type { AdvisorAssignment, AdvisorKey, Client, ContactEvent, ContactType, DataSnapshot, Prospect, ProspectEvent, ServiceModel, Tier, User } from "../../types";
 import { addDays } from "../dates";
 import { computeClientDueDates, rebuildAllTasks } from "../../engine/serviceEngine";
 
@@ -137,6 +137,7 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
       const durations: Record<ContactType, number> = {
         meeting: 45 + Math.floor(rand() * 4) * 15,
         call: 10 + Math.floor(rand() * 5) * 5,
+        voicemail: 1,
         admin: 5 + Math.floor(rand() * 3) * 5,
       };
       const notesPool = type === "meeting" ? MEETING_NOTES : type === "call" ? CALL_NOTES : ADMIN_NOTES;
@@ -159,12 +160,18 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
       (offset, n) => push("call", offset, n + 100),
     );
     if (i % 4 === 0) push("admin", -9 - (i % 3), 200);
+    // A few households where we've been leaving voicemails, trying to reach them.
+    if (spec.lastCall <= -90) {
+      push("voicemail", -4, 300);
+      push("voicemail", -11, 301);
+    }
   });
 
   const dueDates = clients.flatMap((c) =>
     computeClientDueDates(c, events, DEFAULT_SERVICE_MODELS, `${today}T06:00:00.000Z`),
   );
   const tasks = rebuildAllTasks(clients, dueDates, [], today);
+  const { prospects, prospectEvents } = buildDemoProspects(today);
 
   return {
     users: DEMO_USERS,
@@ -173,5 +180,81 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
     contactEvents: events,
     dueDates,
     tasks,
+    prospects,
+    prospectEvents,
   };
+}
+
+interface ProspectSpec {
+  name: string;
+  advisor: AdvisorAssignment;
+  phone: string;
+  status: Prospect["status"];
+  nextFollowUp: number | null;
+  events: Array<{ type: ProspectEvent["type"]; offset: number; notes?: string }>;
+}
+
+const PROSPECT_SPECS: ProspectSpec[] = [
+  {
+    name: "Sandoval, Marcus", advisor: "matt", phone: "(419) 555-0231", status: "working", nextFollowUp: 1,
+    events: [
+      { type: "call", offset: -2, notes: "Left a voicemail." },
+      { type: "voicemail", offset: -6 },
+      { type: "voicemail", offset: -12, notes: "Referred by the Whitfields." },
+    ],
+  },
+  {
+    name: "Greenfield, Tara", advisor: "advisor_b", phone: "(419) 555-0288", status: "appointment", nextFollowUp: 3,
+    events: [
+      { type: "meeting", offset: -1, notes: "Intro meeting booked for next week." },
+      { type: "call", offset: -8, notes: "Great first conversation." },
+    ],
+  },
+  {
+    name: "Okonkwo, David", advisor: "matt", phone: "(419) 555-0265", status: "new", nextFollowUp: 0,
+    events: [{ type: "note", offset: -1, notes: "Seminar lead — call this week." }],
+  },
+  {
+    name: "Pearlman Family", advisor: "matt", phone: "(419) 555-0299", status: "working", nextFollowUp: -2,
+    events: [
+      { type: "voicemail", offset: -3 },
+      { type: "voicemail", offset: -10 },
+      { type: "email", offset: -15, notes: "Sent intro packet." },
+    ],
+  },
+];
+
+function buildDemoProspects(today: string): {
+  prospects: Prospect[];
+  prospectEvents: ProspectEvent[];
+} {
+  const prospects: Prospect[] = [];
+  const prospectEvents: ProspectEvent[] = [];
+  PROSPECT_SPECS.forEach((spec, i) => {
+    const id = `prospect_${String(i + 1).padStart(2, "0")}`;
+    prospects.push({
+      id,
+      name: spec.name,
+      assignedAdvisor: spec.advisor,
+      phone: spec.phone,
+      status: spec.status,
+      notes: null,
+      nextFollowUp: spec.nextFollowUp === null ? null : addDays(today, spec.nextFollowUp),
+      createdAt: `${addDays(today, -30)}T09:00:00.000Z`,
+      updatedAt: `${today}T09:00:00.000Z`,
+    });
+    spec.events.forEach((e, n) => {
+      const eventDate = addDays(today, e.offset);
+      prospectEvents.push({
+        id: `pevent_${id}_${n}`,
+        prospectId: id,
+        advisor: spec.advisor === "joint" ? "matt" : spec.advisor,
+        type: e.type,
+        eventDate,
+        notes: e.notes ?? null,
+        createdAt: `${eventDate}T15:00:00.000Z`,
+      });
+    });
+  });
+  return { prospects, prospectEvents };
 }

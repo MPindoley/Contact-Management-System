@@ -13,6 +13,7 @@ import {
   QueueIcon,
   SlidersIcon,
   SunriseIcon,
+  TargetIcon,
   UsersIcon,
 } from "./icons";
 
@@ -20,6 +21,7 @@ const NAV = [
   { to: "/", label: "Morning Dashboard", Icon: SunriseIcon, end: true },
   { to: "/queue", label: "Action Queue", Icon: QueueIcon },
   { to: "/clients", label: "Clients", Icon: UsersIcon },
+  { to: "/prospects", label: "Prospects", Icon: TargetIcon },
   { to: "/report", label: "Firm Report", Icon: ChartIcon },
   { to: "/settings/service-models", label: "Service Models", Icon: SlidersIcon },
 ];

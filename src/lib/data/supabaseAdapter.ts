@@ -7,6 +7,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   AddClientInput,
+  AddProspectInput,
   AdvisorAssignment,
   AdvisorKey,
   Client,
@@ -15,7 +16,12 @@ import type {
   DataSnapshot,
   DueDate,
   LogContactInput,
+  LogProspectInput,
   Priority,
+  Prospect,
+  ProspectEvent,
+  ProspectEventType,
+  ProspectStatus,
   Role,
   ServiceModel,
   Task,
@@ -24,6 +30,7 @@ import type {
   TouchType,
   UpdateClientInput,
   UpdateContactInput,
+  UpdateProspectInput,
   User,
 } from "../../types";
 import type { DataAdapter } from "./adapter";
@@ -177,6 +184,48 @@ const mapTask = (r: TaskRow): Task => ({
   createdAt: r.created_at,
 });
 
+interface ProspectRow {
+  id: string;
+  name: string;
+  assigned_advisor: AdvisorAssignment;
+  phone: string | null;
+  status: ProspectStatus;
+  notes: string | null;
+  next_follow_up: string | null;
+  created_at: string;
+  updated_at: string;
+}
+interface ProspectEventRow {
+  id: string;
+  prospect_id: string;
+  advisor: AdvisorKey;
+  type: ProspectEventType;
+  event_date: string;
+  notes: string | null;
+  created_at: string;
+}
+
+const mapProspect = (r: ProspectRow): Prospect => ({
+  id: r.id,
+  name: r.name,
+  assignedAdvisor: r.assigned_advisor,
+  phone: r.phone,
+  status: r.status,
+  notes: r.notes,
+  nextFollowUp: r.next_follow_up,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+const mapProspectEvent = (r: ProspectEventRow): ProspectEvent => ({
+  id: r.id,
+  prospectId: r.prospect_id,
+  advisor: r.advisor,
+  type: r.type,
+  eventDate: r.event_date,
+  notes: r.notes,
+  createdAt: r.created_at,
+});
+
 function unwrap<T>(result: { data: T | null; error: { message: string } | null }, what: string): T {
   if (result.error) throw new Error(`${what}: ${result.error.message}`);
   if (result.data === null) throw new Error(`${what}: no data returned`);
@@ -187,14 +236,17 @@ export function createSupabaseAdapter(): DataAdapter {
   const db = getSupabase();
 
   async function fetchSnapshot(): Promise<DataSnapshot> {
-    const [users, clients, models, events, dueDates, tasks] = await Promise.all([
-      db.from("users").select("*").order("name"),
-      db.from("clients").select("*").order("household_name"),
-      db.from("service_models").select("*").order("tier"),
-      db.from("contact_events").select("*").order("event_date", { ascending: false }).limit(5000),
-      db.from("due_dates").select("*"),
-      db.from("tasks").select("*").order("due_date"),
-    ]);
+    const [users, clients, models, events, dueDates, tasks, prospects, prospectEvents] =
+      await Promise.all([
+        db.from("users").select("*").order("name"),
+        db.from("clients").select("*").order("household_name"),
+        db.from("service_models").select("*").order("tier"),
+        db.from("contact_events").select("*").order("event_date", { ascending: false }).limit(5000),
+        db.from("due_dates").select("*"),
+        db.from("tasks").select("*").order("due_date"),
+        db.from("prospects").select("*").order("name"),
+        db.from("prospect_events").select("*").order("event_date", { ascending: false }).limit(5000),
+      ]);
 
     return {
       users: unwrap<UserRow[]>(users, "Loading users").map(mapUser),
@@ -203,6 +255,10 @@ export function createSupabaseAdapter(): DataAdapter {
       contactEvents: unwrap<ContactEventRow[]>(events, "Loading contact events").map(mapEvent),
       dueDates: unwrap<DueDateRow[]>(dueDates, "Loading due dates").map(mapDueDate),
       tasks: unwrap<TaskRow[]>(tasks, "Loading tasks").map(mapTask),
+      prospects: unwrap<ProspectRow[]>(prospects, "Loading prospects").map(mapProspect),
+      prospectEvents: unwrap<ProspectEventRow[]>(prospectEvents, "Loading prospect events").map(
+        mapProspectEvent,
+      ),
     };
   }
 
@@ -367,6 +423,64 @@ export function createSupabaseAdapter(): DataAdapter {
         })
         .eq("tier", model.tier);
       if (error) throw new Error(`Updating service model: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    // --- Prospects ---
+    async addProspect(input: AddProspectInput) {
+      const { error } = await db.from("prospects").insert({
+        name: input.name.trim(),
+        assigned_advisor: input.assignedAdvisor,
+        phone: input.phone?.trim() || null,
+        status: input.status,
+        notes: input.notes?.trim() || null,
+        next_follow_up: input.nextFollowUp || null,
+      });
+      if (error) throw new Error(`Adding prospect: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async updateProspect(prospectId: string, patch: UpdateProspectInput) {
+      const row: Record<string, unknown> = {};
+      if (patch.name !== undefined) row.name = patch.name.trim();
+      if (patch.assignedAdvisor !== undefined) row.assigned_advisor = patch.assignedAdvisor;
+      if (patch.phone !== undefined) row.phone = patch.phone?.trim() || null;
+      if (patch.status !== undefined) row.status = patch.status;
+      if (patch.notes !== undefined) row.notes = patch.notes?.trim() || null;
+      if (patch.nextFollowUp !== undefined) row.next_follow_up = patch.nextFollowUp || null;
+
+      const { error } = await db.from("prospects").update(row).eq("id", prospectId);
+      if (error) throw new Error(`Updating prospect: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async deleteProspect(prospectId: string) {
+      const { error } = await db.from("prospects").delete().eq("id", prospectId);
+      if (error) throw new Error(`Deleting prospect: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async logProspectContact(input: LogProspectInput) {
+      const { error } = await db.from("prospect_events").insert({
+        prospect_id: input.prospectId,
+        advisor: input.advisor,
+        type: input.type,
+        event_date: input.eventDate,
+        notes: input.notes?.trim() || null,
+      });
+      if (error) throw new Error(`Logging prospect contact: ${error.message}`);
+
+      const row: Record<string, unknown> = {};
+      if (input.nextFollowUp !== undefined) row.next_follow_up = input.nextFollowUp || null;
+      if (Object.keys(row).length > 0) {
+        await db.from("prospects").update(row).eq("id", input.prospectId);
+      }
+      return fetchSnapshot();
+    },
+
+    async deleteProspectEvent(eventId: string) {
+      const { error } = await db.from("prospect_events").delete().eq("id", eventId);
+      if (error) throw new Error(`Deleting prospect contact: ${error.message}`);
       return fetchSnapshot();
     },
 

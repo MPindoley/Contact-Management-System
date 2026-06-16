@@ -15,10 +15,10 @@ import type { AdvisorKey, ContactType } from "../types";
 import { ADVISOR_LABELS, ADVISOR_KEYS, CONTACT_TYPE_LABELS } from "../types";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
-import { formatMedium, todayISO } from "../lib/dates";
+import { addDays, formatMedium, todayISO } from "../lib/dates";
 import { Button, Field, Input, Modal, Segmented, Select, Spinner, Textarea } from "./ui";
 import { TierBadge, AdvisorChip } from "./badges";
-import { CalendarIcon, ClipboardIcon, PhoneIcon, SearchIcon } from "./icons";
+import { CalendarIcon, ClipboardIcon, PhoneIcon, SearchIcon, VoicemailIcon } from "./icons";
 
 interface LogContactContextValue {
   open: (clientId?: string) => void;
@@ -72,11 +72,19 @@ export function LogContactProvider({ children }: { children: ReactNode }) {
 const DURATION_CHIPS: Record<ContactType, number[]> = {
   meeting: [30, 45, 60, 90],
   call: [10, 15, 20, 30],
+  voicemail: [1, 2],
   admin: [5, 10, 15],
 };
 
+const TRY_AGAIN_OPTIONS = [
+  { label: "Tomorrow", days: 1 },
+  { label: "3 days", days: 3 },
+  { label: "1 week", days: 7 },
+  { label: "Don't snooze", days: 0 },
+];
+
 function LogContactForm({ initialClientId, onClose }: { initialClientId: string | null; onClose: () => void }) {
-  const { data, currentUser, logContact, busy, today } = useApp();
+  const { data, currentUser, logContact, snoozeTouch, busy, today } = useApp();
   const toast = useToast();
 
   const clients = useMemo(
@@ -94,6 +102,8 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   const [duration, setDuration] = useState<string>("");
   const [advisor, setAdvisor] = useState<AdvisorKey>(currentUser?.advisorKey ?? "matt");
   const [notes, setNotes] = useState("");
+  // After leaving a voicemail: snooze the call this many days (0 = don't snooze).
+  const [tryAgainDays, setTryAgainDays] = useState(3);
 
   const selected = clients.find((c) => c.id === clientId) ?? null;
 
@@ -124,7 +134,17 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
         durationMinutes: duration.trim() === "" ? null : Math.max(0, Number(duration)),
         notes: notes.trim() || null,
       });
-      if (type === "admin") {
+      if (type === "voicemail") {
+        if (tryAgainDays > 0) {
+          await snoozeTouch(selected.id, "call", addDays(today, tryAgainDays));
+          toast.push(
+            `Voicemail logged — still on your list, back in ${tryAgainDays} ${tryAgainDays === 1 ? "day" : "days"} to try again.`,
+            "info",
+          );
+        } else {
+          toast.push(`Voicemail logged for ${selected.householdName} — still due, clock unchanged.`, "info");
+        }
+      } else if (type === "admin") {
         toast.push(`Admin touch logged for ${selected.householdName} — service clock unchanged.`, "info");
       } else {
         const next = dueDates.find((d) => d.type === type);
@@ -206,16 +226,51 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
             onChange={setType}
             options={[
               { value: "meeting", label: "Meeting", icon: <CalendarIcon className="size-4" /> },
-              { value: "call", label: "Meaningful Call", icon: <PhoneIcon className="size-4" /> },
+              { value: "call", label: "Call", icon: <PhoneIcon className="size-4" /> },
+              { value: "voicemail", label: "Voicemail", icon: <VoicemailIcon className="size-4" /> },
               { value: "admin", label: "Admin", icon: <ClipboardIcon className="size-4" /> },
             ]}
           />
+          {type === "call" && (
+            <p className="mt-1.5 text-xs text-stone-400">
+              A meaningful call — actually reached them. Resets the call clock.
+            </p>
+          )}
+          {type === "voicemail" && (
+            <p className="mt-1.5 text-xs text-violet-700">
+              Tracked as an attempt, but the call stays due — you haven't reached them yet.
+            </p>
+          )}
           {type === "admin" && (
             <p className="mt-1.5 text-xs text-stone-400">
               Admin touches are recorded but never reset the service clock.
             </p>
           )}
         </Field>
+
+        {type === "voicemail" && (
+          <Field label="Try them again" group>
+            <div className="flex flex-wrap gap-1.5">
+              {TRY_AGAIN_OPTIONS.map((o) => (
+                <button
+                  key={o.days}
+                  type="button"
+                  onClick={() => setTryAgainDays(o.days)}
+                  className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    tryAgainDays === o.days
+                      ? "bg-pine-700 text-white"
+                      : "bg-stone-100 text-ink-soft hover:bg-stone-200"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-stone-400">
+              Snoozes the call off today's list and brings it back when it's time to try again.
+            </p>
+          </Field>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Date">
