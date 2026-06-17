@@ -103,6 +103,7 @@ export function ProspectProfile() {
         tier: "B",
         phone: prospect.phone,
         redtailId: null,
+        revenue: null,
         heldAway: false,
         heldAwayNote: null,
         lastMeetingDate: null,

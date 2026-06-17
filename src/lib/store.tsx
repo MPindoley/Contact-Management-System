@@ -18,6 +18,7 @@ import type {
   Client,
   DataSnapshot,
   DueDate,
+  FamilyRole,
   LogContactInput,
   LogProspectInput,
   Prospect,
@@ -67,6 +68,15 @@ interface AppContextValue {
   planOutreach(items: Array<{ clientId: string; dueDate: string }>): Promise<void>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<void>;
   deleteClient(clientId: string): Promise<void>;
+  linkFamily(
+    clientIds: string[],
+    familyId: string | null,
+    name: string | null,
+    roles?: Record<string, FamilyRole>,
+  ): Promise<void>;
+  unlinkFromFamily(clientId: string): Promise<void>;
+  renameFamily(familyId: string, name: string): Promise<void>;
+  autoLinkBySurname(): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
   addProspect(input: AddProspectInput): Promise<Prospect | null>;
   updateProspect(prospectId: string, patch: UpdateProspectInput): Promise<void>;
@@ -329,6 +339,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  const linkFamily = useCallback(
+    (
+      clientIds: string[],
+      familyId: string | null,
+      name: string | null,
+      roles?: Record<string, FamilyRole>,
+    ) => run(() => adapter.linkFamily(clientIds, familyId, name, roles)),
+    [adapter, run],
+  );
+
+  const unlinkFromFamily = useCallback(
+    (clientId: string) => run(() => adapter.unlinkFromFamily(clientId)),
+    [adapter, run],
+  );
+
+  const renameFamily = useCallback(
+    (familyId: string, name: string) => run(() => adapter.renameFamily(familyId, name)),
+    [adapter, run],
+  );
+
+  const autoLinkBySurname = useCallback(() => run(() => adapter.autoLinkBySurname()), [adapter, run]);
+
   const updateServiceModel = useCallback(
     (model: ServiceModel) => run(() => adapter.updateServiceModel(model)),
     [adapter, run],
@@ -396,6 +428,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       planOutreach,
       updateClient,
       deleteClient,
+      linkFamily,
+      unlinkFromFamily,
+      renameFamily,
+      autoLinkBySurname,
       updateServiceModel,
       addProspect,
       updateProspect,
@@ -409,7 +445,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       mode, authReady, currentUser, signInDemo, signInSupabase, signUpSupabase, signOut,
       data, loading, busy, error, today, refresh,
       logContact, addClient, importClients, updateContactEvent, deleteContactEvent, snoozeTouch,
-      planOutreach, updateClient, deleteClient, updateServiceModel,
+      planOutreach, updateClient, deleteClient,
+      linkFamily, unlinkFromFamily, renameFamily, autoLinkBySurname, updateServiceModel,
       addProspect, updateProspect, deleteProspect, logProspectContact, deleteProspectEvent,
       rebuildQueue, resetDemo,
     ],

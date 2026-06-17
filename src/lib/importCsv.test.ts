@@ -7,16 +7,23 @@ import {
   parseDateValue,
   parseRevenue,
   parseTier,
-  tierForRevenue,
+  tierFromCriteria,
   type ImportOptions,
 } from "./importCsv";
+
+const CRITERIA = [
+  { tier: "S" as const, minRevenue: 250000 },
+  { tier: "A" as const, minRevenue: 10000 },
+  { tier: "B" as const, minRevenue: 4000 },
+  { tier: "C" as const, minRevenue: null },
+];
 
 const baseOptions = (overrides: Partial<ImportOptions> = {}): ImportOptions => ({
   mapping: {},
   defaultAdvisor: "matt",
   defaultTier: "B",
   advisorValueMap: {},
-  thresholds: null,
+  tierCriteria: null,
   existingClients: [],
   applyUpdates: true,
   ...overrides,
@@ -90,12 +97,12 @@ describe("value parsing", () => {
     expect(parseDateValue("")).toBeNull();
   });
 
-  it("maps revenue to tiers by threshold", () => {
-    const t = { a: 10000, b: 4000 };
-    expect(tierForRevenue(18500, t)).toBe("A");
-    expect(tierForRevenue(10000, t)).toBe("A");
-    expect(tierForRevenue(9200, t)).toBe("B");
-    expect(tierForRevenue(2400, t)).toBe("C");
+  it("maps revenue to tiers using the saved criteria (S/A/B/C)", () => {
+    expect(tierFromCriteria(300000, CRITERIA)).toBe("S");
+    expect(tierFromCriteria(18500, CRITERIA)).toBe("A");
+    expect(tierFromCriteria(10000, CRITERIA)).toBe("A");
+    expect(tierFromCriteria(9200, CRITERIA)).toBe("B");
+    expect(tierFromCriteria(2400, CRITERIA)).toBe("C");
   });
 });
 
@@ -121,7 +128,7 @@ describe("buildImportPreview", () => {
       redtailId: 5,
     },
     advisorValueMap: { matt: "matt", "advisor b": "advisor_b", both: "joint" },
-    thresholds: { a: 10000, b: 4000 },
+    tierCriteria: CRITERIA,
   });
 
   it("resolves tiers, advisors, dates; counts and flags problems", () => {
@@ -154,12 +161,12 @@ describe("buildImportPreview", () => {
       baseOptions({
         mapping: options.mapping,
         advisorValueMap: options.advisorValueMap,
-        thresholds: options.thresholds,
+        tierCriteria: options.tierCriteria,
         existingClients: [
           // Whitfield exists at Tier C with no phone → should update to A.
-          { id: "x1", householdName: "Whitfield, Daniel & Mara", tier: "C", assignedAdvisor: "matt", phone: null, redtailId: "48200", heldAway: false },
-          // Castellanos already Tier B / Beau → matches the CSV → unchanged.
-          { id: "x2", householdName: "Castellanos Family", tier: "B", assignedAdvisor: "advisor_b", phone: null, redtailId: "48237", heldAway: false },
+          { id: "x1", householdName: "Whitfield, Daniel & Mara", tier: "C", assignedAdvisor: "matt", phone: null, redtailId: "48200", revenue: null, heldAway: false },
+          // Castellanos already Tier B / Beau / same AUM → matches → unchanged.
+          { id: "x2", householdName: "Castellanos Family", tier: "B", assignedAdvisor: "advisor_b", phone: null, redtailId: "48237", revenue: 9200, heldAway: false },
         ],
       }),
     );
@@ -172,7 +179,7 @@ describe("buildImportPreview", () => {
     const whitfield = preview.rows.find((r) => r.householdName.startsWith("Whitfield"))!;
     expect(whitfield.status).toBe("update");
     expect(whitfield.existingId).toBe("x1");
-    expect(whitfield.patch).toEqual({ tier: "A" });
+    expect(whitfield.patch).toEqual({ tier: "A", revenue: 18500 });
     expect(whitfield.changes).toContain("Tier C → A");
     // Crucially, an update carries no contact-history seeding.
     expect(whitfield.input).toBeUndefined();
@@ -186,7 +193,7 @@ describe("buildImportPreview", () => {
       baseOptions({
         mapping: { householdName: 0, phone: 1 },
         existingClients: [
-          { id: "e1", householdName: "Existing Household", tier: "A", assignedAdvisor: "advisor_b", phone: null, redtailId: null, heldAway: false },
+          { id: "e1", householdName: "Existing Household", tier: "A", assignedAdvisor: "advisor_b", phone: null, redtailId: null, revenue: null, heldAway: false },
         ],
       }),
     );
@@ -204,7 +211,7 @@ describe("buildImportPreview", () => {
         mapping: { householdName: 0, tier: 1 },
         applyUpdates: false,
         existingClients: [
-          { id: "e1", householdName: "Existing Household", tier: "C", assignedAdvisor: "matt", phone: null, redtailId: null, heldAway: false },
+          { id: "e1", householdName: "Existing Household", tier: "C", assignedAdvisor: "matt", phone: null, redtailId: null, revenue: null, heldAway: false },
         ],
       }),
     );

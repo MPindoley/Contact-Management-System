@@ -20,7 +20,7 @@ import {
 } from "../lib/importCsv";
 import { ADVISOR_LABELS, TIERS, type AdvisorAssignment, type Tier } from "../types";
 import { TierBadge, AdvisorChip } from "../components/badges";
-import { Button, Field, Input, Select, Spinner } from "../components/ui";
+import { Button, Field, Select, Spinner } from "../components/ui";
 import { CheckCircleIcon, UsersIcon } from "../components/icons";
 
 const FIELD_LABELS: Array<{ field: ImportField; label: string; hint: string }> = [
@@ -36,7 +36,7 @@ const FIELD_LABELS: Array<{ field: ImportField; label: string; hint: string }> =
 ];
 
 export function ImportClients() {
-  const { data, importClients, busy } = useApp();
+  const { data, importClients, autoLinkBySurname, busy } = useApp();
   const toast = useToast();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -47,12 +47,8 @@ export function ImportClients() {
   const [defaultAdvisor, setDefaultAdvisor] = useState<AdvisorAssignment>("matt");
   const [defaultTier, setDefaultTier] = useState<Tier>("B");
   const [advisorValueMap, setAdvisorValueMap] = useState<Record<string, AdvisorAssignment>>({});
-  // Cutoffs default from the saved tier criteria (editable on the Tiers screen).
-  const savedA = data?.serviceModels.find((m) => m.tier === "A")?.minRevenue;
-  const savedB = data?.serviceModels.find((m) => m.tier === "B")?.minRevenue;
-  const [thresholdA, setThresholdA] = useState(savedA != null ? String(savedA) : "100000");
-  const [thresholdB, setThresholdB] = useState(savedB != null ? String(savedB) : "25000");
   const [applyUpdates, setApplyUpdates] = useState(true);
+  const [autoLink, setAutoLink] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
   async function onFile(file: File) {
@@ -88,13 +84,12 @@ export function ImportClients() {
     [csv, mapping],
   );
 
-  const thresholds = useMemo(() => {
-    if (mapping.revenue === undefined || mapping.tier !== undefined) return null;
-    const a = Number(thresholdA.replace(/[$,\s]/g, ""));
-    const b = Number(thresholdB.replace(/[$,\s]/g, ""));
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-    return { a, b };
-  }, [mapping.revenue, mapping.tier, thresholdA, thresholdB]);
+  // Auto-tiering follows the SAVED criteria from the Tiers screen (one source
+  // of truth) — only when a revenue column is mapped and no explicit tier one.
+  const tierCriteria = useMemo(() => {
+    if (!data || mapping.revenue === undefined || mapping.tier !== undefined) return null;
+    return data.serviceModels.map((m) => ({ tier: m.tier, minRevenue: m.minRevenue }));
+  }, [data, mapping.revenue, mapping.tier]);
 
   const preview = useMemo(() => {
     if (!csv || mapping.householdName === undefined || !data) return null;
@@ -103,7 +98,7 @@ export function ImportClients() {
       defaultAdvisor,
       defaultTier,
       advisorValueMap,
-      thresholds,
+      tierCriteria,
       applyUpdates,
       existingClients: data.clients.map((c) => ({
         id: c.id,
@@ -112,10 +107,11 @@ export function ImportClients() {
         assignedAdvisor: c.assignedAdvisor,
         phone: c.phone,
         redtailId: c.redtailId,
+        revenue: c.revenue,
         heldAway: c.heldAway,
       })),
     });
-  }, [csv, mapping, defaultAdvisor, defaultTier, advisorValueMap, thresholds, applyUpdates, data]);
+  }, [csv, mapping, defaultAdvisor, defaultTier, advisorValueMap, tierCriteria, applyUpdates, data]);
 
   async function runImport() {
     if (!preview || preview.newCount + preview.updateCount === 0) return;
@@ -125,10 +121,13 @@ export function ImportClients() {
       .map((r) => ({ id: r.existingId!, patch: r.patch! }));
     try {
       await importClients(creates, updates);
+      if (autoLink) await autoLinkBySurname();
       const parts: string[] = [];
       if (creates.length) parts.push(`${creates.length} added`);
       if (updates.length) parts.push(`${updates.length} updated`);
-      toast.push(`Import complete — ${parts.join(" · ")}. Contact history untouched.`);
+      toast.push(
+        `Import complete — ${parts.join(" · ")}.${autoLink ? " Same-surname households linked." : ""} Contact history untouched.`,
+      );
       navigate("/clients");
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Import failed partway — check the Clients list before retrying.", "error");
@@ -293,30 +292,26 @@ export function ImportClients() {
             ) : mapping.revenue !== undefined ? (
               <div>
                 <p className="mb-1.5 text-[13px] font-medium text-ink-soft">
-                  Tier cutoffs — the most important setting in this import
+                  Tiers from your saved criteria
                 </p>
-                <div className="space-y-2 rounded-lg border border-stone-200 p-3">
-                  <label className="flex items-center justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <TierBadge tier="A" /> revenue at or above
-                    </span>
-                    <Input className="w-32" value={thresholdA} onChange={(e) => setThresholdA(e.target.value)} />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <TierBadge tier="B" /> revenue at or above
-                    </span>
-                    <Input className="w-32" value={thresholdB} onChange={(e) => setThresholdB(e.target.value)} />
-                  </label>
-                  <p className="flex items-center gap-2 text-sm text-ink-soft">
-                    <TierBadge tier="C" /> everyone below
-                  </p>
+                <div className="space-y-1.5 rounded-lg border border-stone-200 p-3">
+                  {data.serviceModels.map((m) => (
+                    <p key={m.tier} className="flex items-center gap-2 text-sm">
+                      <TierBadge tier={m.tier} />
+                      <span className="text-ink-soft">
+                        {m.minRevenue != null ? `revenue at or above ${formatMoney(m.minRevenue)}` : "everyone below"}
+                      </span>
+                    </p>
+                  ))}
                   {preview && (
                     <p className="tnum border-t border-stone-100 pt-2 text-[13px] font-medium">
-                      With these cutoffs: {preview.tierCounts.A} A · {preview.tierCounts.B} B ·{" "}
-                      {preview.tierCounts.C} C
+                      New: {preview.tierCounts.S} S · {preview.tierCounts.A} A ·{" "}
+                      {preview.tierCounts.B} B · {preview.tierCounts.C} C
                     </p>
                   )}
+                  <p className="text-xs text-stone-400">
+                    Edit these floors on the <Link to="/settings/service-models" className="underline underline-offset-2">Tiers &amp; service models</Link> screen.
+                  </p>
                 </div>
               </div>
             ) : (
@@ -339,21 +334,38 @@ export function ImportClients() {
         <section className="card p-5">
           <StepHeading n={3} title="Review and import" done={false} />
 
-          <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 select-none">
-            <input
-              type="checkbox"
-              checked={applyUpdates}
-              onChange={(e) => setApplyUpdates(e.target.checked)}
-              className="mt-0.5 size-4 cursor-pointer accent-pine-700"
-            />
-            <span className="text-[13px] leading-snug text-ink">
-              <span className="font-medium">Update existing households where the CSV differs</span>
-              <span className="block text-xs text-stone-400">
-                Changes tier, advisor, and phone only — logged contact history and service clocks
-                are never touched.
+          <div className="mt-3 space-y-2">
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 select-none">
+              <input
+                type="checkbox"
+                checked={applyUpdates}
+                onChange={(e) => setApplyUpdates(e.target.checked)}
+                className="mt-0.5 size-4 cursor-pointer accent-pine-700"
+              />
+              <span className="text-[13px] leading-snug text-ink">
+                <span className="font-medium">Update existing households where the CSV differs</span>
+                <span className="block text-xs text-stone-400">
+                  Changes tier, advisor, phone, and AUM only — logged contact history and service
+                  clocks are never touched.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 select-none">
+              <input
+                type="checkbox"
+                checked={autoLink}
+                onChange={(e) => setAutoLink(e.target.checked)}
+                className="mt-0.5 size-4 cursor-pointer accent-pine-700"
+              />
+              <span className="text-[13px] leading-snug text-ink">
+                <span className="font-medium">Link households that share a last name into families</span>
+                <span className="block text-xs text-stone-400">
+                  Last-name matching is fuzzy — review and fix any wrong links on the profiles
+                  afterward.
+                </span>
+              </span>
+            </label>
+          </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
             <span className="flex items-center gap-1.5 font-medium text-pine-800">
@@ -477,6 +489,12 @@ function importButtonLabel(newCount: number, updateCount: number): string {
   if (newCount) parts.push(`Add ${newCount}`);
   if (updateCount) parts.push(`update ${updateCount}`);
   return parts.length === 0 ? "Nothing to apply" : parts.join(" · ");
+}
+
+function formatMoney(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  return `$${n}`;
 }
 
 function StepHeading({ n, title, done }: { n: number; title: string; done: boolean }) {

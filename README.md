@@ -115,6 +115,16 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 
 ### Daily-use touches
 
+- **Families** — link spouses / family members (Client Profile → Family panel,
+  or opt-in auto-link by last name during import). See their **combined
+  assets** and the tier the saved criteria suggest for the combined total, with
+  one click to apply it to everyone. Each household keeps its own profile and
+  service schedule; designate roles (spouse, child, grandchild…) and unlink any
+  wrong auto-link. Stored in their own `families` table.
+- **Import follows your tier criteria** — when a revenue/AUM column is mapped,
+  the importer auto-assigns S/A/B/C straight from the floors you set on the
+  **Tiers & service models** screen (no separate cutoffs to re-enter), and it
+  persists each household's AUM.
 - **Money to capture** — flag a household that has held-away assets or money
   due (checkbox + a note, or a "Money to Capture" CSV column). It shows a
   green **$ Capture** highlight on the dashboard, queue, profile, and the

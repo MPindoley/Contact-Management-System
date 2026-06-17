@@ -36,6 +36,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
   const [active, setActive] = useState(client?.active ?? true);
   const [phone, setPhone] = useState(client?.phone ?? "");
   const [redtailId, setRedtailId] = useState(client?.redtailId ?? "");
+  const [revenue, setRevenue] = useState(client?.revenue != null ? String(client.revenue) : "");
   const [heldAway, setHeldAway] = useState(client?.heldAway ?? false);
   const [heldAwayNote, setHeldAwayNote] = useState(client?.heldAwayNote ?? "");
   const [lastMeeting, setLastMeeting] = useState(todayISO());
@@ -54,6 +55,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
     }
   }
 
+  const revNum = revenue.replace(/[$,\s]/g, "") === "" ? null : Number(revenue.replace(/[$,\s]/g, ""));
   const model = data ? modelFor(data.serviceModels, tier) : null;
   const cadence = model
     ? `Meeting every ${model.meetingIntervalDays}d · call every ${model.callIntervalDays}d · ≈${annualRequired(model).total} touches/yr`
@@ -69,6 +71,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           tier,
           active,
           phone: phone.trim() || null,
+          revenue: revNum,
           heldAway,
           heldAwayNote: heldAwayNote.trim() || null,
         });
@@ -85,6 +88,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           tier,
           phone: phone.trim() || null,
           redtailId: redtailId || null,
+          revenue: revNum,
           heldAway,
           heldAwayNote: heldAwayNote.trim() || null,
           lastMeetingDate: lastMeeting || null,
@@ -181,6 +185,16 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
             </Select>
           </Field>
         </div>
+
+        <Field label="Revenue / AUM (optional)" hint="Used for tiering and family combined totals.">
+          <Input
+            type="text"
+            inputMode="numeric"
+            value={revenue}
+            onChange={(e) => setRevenue(e.target.value)}
+            placeholder="e.g. 150000"
+          />
+        </Field>
 
         {editing ? (
           <Field label="Status">

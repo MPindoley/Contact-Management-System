@@ -13,6 +13,7 @@ import { ScoreRing } from "../components/ScoreRing";
 import { ClientFormModal } from "../components/ClientFormModal";
 import { EditContactModal } from "../components/EditContactModal";
 import { EmptyState } from "../components/EmptyState";
+import { FamilyPanel } from "../components/FamilyPanel";
 import { PhoneLink } from "../components/PhoneLink";
 import { Button } from "../components/ui";
 import { CalendarIcon, ClockIcon, PhoneIcon, PlusIcon, VoicemailIcon } from "../components/icons";
@@ -215,6 +216,7 @@ export function ClientProfile() {
         </div>
 
         <aside className="space-y-4">
+          <FamilyPanel client={client} />
           <section className="card flex flex-col items-center p-5">
             <h2 className="self-start text-sm font-semibold">Service health</h2>
             <div className="my-4">

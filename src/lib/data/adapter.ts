@@ -2,6 +2,7 @@ import type {
   AddClientInput,
   AddProspectInput,
   DataSnapshot,
+  FamilyRole,
   LogContactInput,
   LogProspectInput,
   ServiceModel,
@@ -46,6 +47,19 @@ export interface DataAdapter {
   /** Permanently delete a household and all its contact history. */
   deleteClient(clientId: string): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
+
+  // --- Family linking ---
+  /** Link households into a family (new family if familyId is null). */
+  linkFamily(
+    clientIds: string[],
+    familyId: string | null,
+    name: string | null,
+    roles?: Record<string, FamilyRole>,
+  ): Promise<DataSnapshot>;
+  unlinkFromFamily(clientId: string): Promise<DataSnapshot>;
+  renameFamily(familyId: string, name: string): Promise<DataSnapshot>;
+  /** Group all un-familied households that share a surname into families. */
+  autoLinkBySurname(): Promise<DataSnapshot>;
 
   // --- Prospects (separate island; never touches client data) ---
   addProspect(input: AddProspectInput): Promise<DataSnapshot>;

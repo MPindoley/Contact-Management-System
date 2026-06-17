@@ -21,6 +21,7 @@ create type contact_type      as enum ('meeting', 'call', 'voicemail', 'admin');
 create type touch_type        as enum ('meeting', 'call');
 create type task_priority     as enum ('high', 'medium', 'low');
 create type task_status       as enum ('open', 'done');
+create type family_role         as enum ('head', 'spouse', 'partner', 'child', 'grandchild', 'parent', 'sibling', 'other');
 -- Prospects are a separate island from the client service engine.
 create type prospect_status     as enum ('new', 'working', 'appointment', 'converted', 'lost');
 create type prospect_event_type as enum ('call', 'voicemail', 'meeting', 'email', 'note');
@@ -41,6 +42,17 @@ create table users (
 );
 
 -- ---------------------------------------------------------------------------
+-- families — link multiple households (spouses, parents, kids). A grouping
+-- only; each linked household keeps its own profile and service schedule.
+-- ---------------------------------------------------------------------------
+create table families (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
 -- clients — one row per household.
 -- ---------------------------------------------------------------------------
 create table clients (
@@ -51,11 +63,16 @@ create table clients (
   active           boolean not null default true,
   phone            text,
   redtail_id       text unique,
+  revenue          numeric,
   held_away        boolean not null default false,
   held_away_note   text,
+  family_id        uuid references families (id) on delete set null,
+  family_role      family_role,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+
+create index clients_family_idx on clients (family_id) where family_id is not null;
 
 create index clients_advisor_idx on clients (assigned_advisor) where active;
 
@@ -382,6 +399,7 @@ end $$;
 create trigger clients_touch        before update on clients        for each row execute function set_updated_at();
 create trigger service_models_touch before update on service_models for each row execute function set_updated_at();
 create trigger prospects_touch      before update on prospects      for each row execute function set_updated_at();
+create trigger families_touch       before update on families       for each row execute function set_updated_at();
 
 -- Link a Supabase Auth signup to its firm profile by email.
 create or replace function handle_new_auth_user() returns trigger
@@ -437,6 +455,7 @@ alter table due_dates      enable row level security;
 alter table tasks          enable row level security;
 alter table prospects        enable row level security;
 alter table prospect_events  enable row level security;
+alter table families         enable row level security;
 
 create policy "authenticated read users"   on users          for select to authenticated using (true);
 create policy "authenticated update users" on users          for update to authenticated using (true) with check (true);
@@ -447,6 +466,7 @@ create policy "authenticated read due"     on due_dates      for select to authe
 create policy "authenticated read tasks"   on tasks          for select to authenticated using (true);
 create policy "authenticated all prospects"       on prospects       for all to authenticated using (true) with check (true);
 create policy "authenticated all prospect events" on prospect_events for all to authenticated using (true) with check (true);
+create policy "authenticated all families"        on families        for all to authenticated using (true) with check (true);
 
 -- Base table privileges (RLS above still decides which rows are visible).
 grant select, insert, update, delete on all tables in schema public to authenticated;
@@ -460,7 +480,7 @@ begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     alter publication supabase_realtime
       add table clients, contact_events, due_dates, tasks, service_models, users,
-                prospects, prospect_events;
+                prospects, prospect_events, families;
   end if;
 end $$;
 

@@ -3,7 +3,7 @@
 // it — a couple of touches due today, a spread of overdue items, and a few
 // things on the horizon. Deterministic (seeded PRNG), so resets are stable.
 
-import type { AdvisorAssignment, AdvisorKey, Client, ContactEvent, ContactType, DataSnapshot, Prospect, ProspectEvent, ServiceModel, Tier, User } from "../../types";
+import type { AdvisorAssignment, AdvisorKey, Client, ContactEvent, ContactType, DataSnapshot, Family, Prospect, ProspectEvent, ServiceModel, Tier, User } from "../../types";
 import { addDays } from "../dates";
 import { computeClientDueDates, rebuildAllTasks } from "../../engine/serviceEngine";
 
@@ -119,6 +119,7 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
     const oldest = Math.min(spec.lastMeeting, spec.lastCall) - 60;
     const exchange = 200 + Math.floor(rand() * 700);
     const line = String(1000 + Math.floor(rand() * 9000));
+    const tierBaseRevenue: Record<Tier, number> = { S: 300000, A: 140000, B: 45000, C: 9000 };
     clients.push({
       id: clientId,
       householdName: spec.name,
@@ -127,8 +128,11 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
       active: true,
       phone: `(419) ${exchange}-${line}`,
       redtailId: String(48200 + i * 37),
+      revenue: Math.round(tierBaseRevenue[spec.tier] * (0.8 + rand() * 0.5)),
       heldAway: i % 5 === 0,
       heldAwayNote: i % 5 === 0 ? "~$180k 401(k) still at a previous custodian." : null,
+      familyId: null,
+      familyRole: null,
       createdAt: `${addDays(today, oldest)}T09:00:00.000Z`,
     });
 
@@ -170,6 +174,19 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
     }
   });
 
+  // A demo family: link the two Whitfield-adjacent S households as spouses.
+  const families: Family[] = [
+    { id: "family_01", name: "Whitfield Family", createdAt: `${addDays(today, -400)}T09:00:00.000Z` },
+  ];
+  const head = clients.find((c) => c.householdName.startsWith("Whitfield"));
+  const spouse = clients.find((c) => c.householdName.startsWith("Castellanos"));
+  if (head && spouse) {
+    head.familyId = "family_01";
+    head.familyRole = "head";
+    spouse.familyId = "family_01";
+    spouse.familyRole = "spouse";
+  }
+
   const dueDates = clients.flatMap((c) =>
     computeClientDueDates(c, events, DEFAULT_SERVICE_MODELS, `${today}T06:00:00.000Z`),
   );
@@ -185,6 +202,7 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
     tasks,
     prospects,
     prospectEvents,
+    families,
   };
 }
 

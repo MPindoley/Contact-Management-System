@@ -93,6 +93,25 @@ export function parseBoolish(raw: string): boolean {
   return /^(y|yes|true|t|1|x|✓|✔)$/i.test(raw.trim());
 }
 
+/**
+ * Best-effort surname from a household name, for grouping families:
+ *   "Whitfield, Daniel & Mara" → "Whitfield"
+ *   "Castellanos Family"       → "Castellanos"
+ *   "Daniel Whitfield"         → "Whitfield"
+ */
+export function surnameOf(householdName: string): string | null {
+  const name = householdName.trim();
+  if (!name) return null;
+  if (name.includes(",")) return name.split(",")[0].trim().toLowerCase() || null;
+  const cleaned = name
+    .replace(/\b(family|household|trust|llc|revocable|living|the)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return null;
+  const words = cleaned.split(" ");
+  return (words.length === 1 ? words[0] : words[words.length - 1]).toLowerCase();
+}
+
 /** Best-effort auto-mapping from header names; user can override in the UI. */
 export function guessMapping(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {};
@@ -159,10 +178,24 @@ function toValidISO(y: number, mo: number, d: number): string | null {
 // Building import rows
 // ---------------------------------------------------------------------------
 
-export interface TierThresholds {
-  /** revenue ≥ a → Tier A; revenue ≥ b → Tier B; below → Tier C. */
-  a: number;
-  b: number;
+/** One tier's revenue floor — the saved criteria from the Tiers screen. */
+export interface TierCriterion {
+  tier: Tier;
+  minRevenue: number | null;
+}
+
+/** Pick the highest tier whose saved revenue floor the household clears. */
+export function tierFromCriteria(revenue: number, criteria: TierCriterion[]): Tier {
+  const withFloor = criteria
+    .filter((c): c is { tier: Tier; minRevenue: number } => c.minRevenue !== null)
+    .sort((a, b) => b.minRevenue - a.minRevenue);
+  for (const c of withFloor) {
+    if (revenue >= c.minRevenue) return c.tier;
+  }
+  // Below every floor → the tier with no floor, else the lowest defined tier.
+  const floorless = criteria.find((c) => c.minRevenue === null);
+  if (floorless) return floorless.tier;
+  return criteria.length > 0 ? criteria[criteria.length - 1].tier : "C";
 }
 
 /** The existing-book fields the importer needs to detect and reconcile. */
@@ -173,6 +206,7 @@ export interface ExistingClientLite {
   assignedAdvisor: AdvisorAssignment;
   phone: string | null;
   redtailId: string | null;
+  revenue: number | null;
   heldAway: boolean;
 }
 
@@ -184,8 +218,8 @@ export interface ImportOptions {
   defaultTier: Tier;
   /** Maps distinct advisor-column values (lowercased) → assignment. */
   advisorValueMap: Record<string, AdvisorAssignment>;
-  /** Auto-assign tier from the revenue column when mapped. */
-  thresholds: TierThresholds | null;
+  /** Saved tier criteria — auto-assigns tiers from the revenue column. */
+  tierCriteria: TierCriterion[] | null;
   /** The current book — used to match rows and reconcile changed fields. */
   existingClients: ExistingClientLite[];
   /** Apply field updates to matched households (false = skip them). */
@@ -220,14 +254,8 @@ export interface ImportPreview {
   tierCounts: Record<Tier, number>;
 }
 
-export function tierForRevenue(revenue: number, t: TierThresholds): Tier {
-  if (revenue >= t.a) return "A";
-  if (revenue >= t.b) return "B";
-  return "C";
-}
-
 export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): ImportPreview {
-  const { mapping, thresholds } = options;
+  const { mapping, tierCriteria } = options;
   const rows: ImportPreviewRow[] = [];
   let skippedNoName = 0;
   const tierCounts: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0 };
@@ -270,7 +298,15 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
       }
     }
 
-    // Tier — explicit when a tier column or a revenue cutoff decides it.
+    // Revenue / AUM (persisted, and feeds tiering when no tier column).
+    const revenueRaw = cell(raw, "revenue");
+    const revenue = mapping.revenue !== undefined ? parseRevenue(revenueRaw) : null;
+    if (mapping.revenue !== undefined && revenueRaw && revenue === null) {
+      warnings.push(`revenue "${revenueRaw}" not a number`);
+    }
+
+    // Tier — explicit tier column wins; otherwise the SAVED tier criteria
+    // assign it from revenue (so import always follows your Tiers screen).
     let tier: Tier | null = null;
     let tierExplicit = false;
     const tierRaw = cell(raw, "tier");
@@ -279,14 +315,9 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
       if (tier) tierExplicit = true;
       else warnings.push(`tier "${tierRaw}" not recognized`);
     }
-    if (!tier && thresholds && mapping.revenue !== undefined) {
-      const revenue = parseRevenue(cell(raw, "revenue"));
-      if (revenue !== null) {
-        tier = tierForRevenue(revenue, thresholds);
-        tierExplicit = true;
-      } else if (cell(raw, "revenue")) {
-        warnings.push(`revenue "${cell(raw, "revenue")}" not a number`);
-      }
+    if (!tier && tierCriteria && revenue !== null) {
+      tier = tierFromCriteria(revenue, tierCriteria);
+      tierExplicit = true;
     }
     tier ??= options.defaultTier;
 
@@ -333,6 +364,10 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
         patch.phone = phone;
         changes.push(existing.phone ? "Phone updated" : "Phone added");
       }
+      if (revenue !== null && revenue !== existing.revenue) {
+        patch.revenue = revenue;
+        changes.push("AUM updated");
+      }
       if (heldAwayProvided && heldAway && !existing.heldAway) {
         patch.heldAway = true;
         changes.push("Flagged: money to capture");
@@ -359,7 +394,7 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
       status: "new",
       changes: [],
       warnings,
-      input: { householdName: name, assignedAdvisor: advisor, tier, phone, redtailId, heldAway, heldAwayNote: null, lastMeetingDate, lastCallDate },
+      input: { householdName: name, assignedAdvisor: advisor, tier, phone, redtailId, revenue, heldAway, heldAwayNote: null, lastMeetingDate, lastCallDate },
     });
   });
 

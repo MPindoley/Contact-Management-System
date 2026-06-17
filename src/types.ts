@@ -3,6 +3,7 @@
 
 // Tiers, top to bottom: S (the very top) → A → B → C.
 export type Tier = "S" | "A" | "B" | "C";
+export type FamilyRole = "head" | "spouse" | "partner" | "child" | "grandchild" | "parent" | "sibling" | "other";
 export type AdvisorAssignment = "matt" | "advisor_b" | "joint";
 export type AdvisorKey = Exclude<AdvisorAssignment, "joint">;
 export type Role = "advisor" | "assistant";
@@ -27,9 +28,20 @@ export interface Client {
   active: boolean;
   phone: string | null;
   redtailId: string | null;
+  /** Managed assets / revenue (AUM). Drives tiering and family combined totals. */
+  revenue: number | null;
   /** "There's money out there to capture" — held-away assets / money due. */
   heldAway: boolean;
   heldAwayNote: string | null;
+  /** Family link — multiple households grouped (spouses, parents, kids…). */
+  familyId: string | null;
+  familyRole: FamilyRole | null;
+  createdAt: string;
+}
+
+export interface Family {
+  id: string;
+  name: string;
   createdAt: string;
 }
 
@@ -114,6 +126,7 @@ export interface DataSnapshot {
   tasks: Task[];
   prospects: Prospect[];
   prospectEvents: ProspectEvent[];
+  families: Family[];
 }
 
 export interface AddProspectInput {
@@ -191,6 +204,7 @@ export interface AddClientInput {
   tier: Tier;
   phone: string | null;
   redtailId: string | null;
+  revenue: number | null;
   heldAway: boolean;
   heldAwayNote: string | null;
   // Seeds the service clock — "when did you last actually touch this client?"
@@ -204,9 +218,34 @@ export interface UpdateClientInput {
   tier?: Tier;
   active?: boolean;
   phone?: string | null;
+  revenue?: number | null;
   heldAway?: boolean;
   heldAwayNote?: string | null;
+  familyId?: string | null;
+  familyRole?: FamilyRole | null;
 }
+
+export const FAMILY_ROLE_LABELS: Record<FamilyRole, string> = {
+  head: "Head",
+  spouse: "Spouse",
+  partner: "Partner",
+  child: "Child",
+  grandchild: "Grandchild",
+  parent: "Parent",
+  sibling: "Sibling",
+  other: "Other",
+};
+
+export const FAMILY_ROLES: FamilyRole[] = [
+  "head",
+  "spouse",
+  "partner",
+  "child",
+  "grandchild",
+  "parent",
+  "sibling",
+  "other",
+];
 
 export const ADVISOR_LABELS: Record<AdvisorAssignment, string> = {
   matt: "Matt",

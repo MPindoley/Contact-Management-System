@@ -9,6 +9,7 @@ import type {
   Client,
   ContactEvent,
   DataSnapshot,
+  FamilyRole,
   LogContactInput,
   LogProspectInput,
   Prospect,
@@ -28,6 +29,7 @@ import {
   uid,
 } from "../../engine/serviceEngine";
 import { buildDemoSnapshot } from "./demoSeed";
+import { surnameOf } from "../importCsv";
 
 const STORAGE_KEY = "relationship-hub-demo-v1";
 
@@ -125,6 +127,23 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
     return clone(ensureLoaded().snapshot);
   }
 
+  /** Drop families that no longer have any members. */
+  function cleanupFamilies(): void {
+    const s = ensureLoaded();
+    const used = new Set(s.snapshot.clients.map((c) => c.familyId).filter(Boolean));
+    s.snapshot.families = s.snapshot.families.filter((f) => used.has(f.id));
+  }
+
+  /** "Whitfield Family" from the first member's surname, else "New Family". */
+  function defaultFamilyName(clientIds: string[]): string {
+    const s = ensureLoaded();
+    const first = s.snapshot.clients.find((c) => c.id === clientIds[0]);
+    const last = first ? surnameOf(first.householdName) : null;
+    // Title-case the lowercased surname for display.
+    const display = last ? last.charAt(0).toUpperCase() + last.slice(1) : null;
+    return display ? `${display} Family` : "New Family";
+  }
+
   return {
     mode: "demo",
 
@@ -169,8 +188,11 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         active: true,
         phone: input.phone?.trim() || null,
         redtailId: input.redtailId?.trim() || null,
+        revenue: input.revenue,
         heldAway: input.heldAway,
         heldAwayNote: input.heldAwayNote?.trim() || null,
+        familyId: null,
+        familyRole: null,
         createdAt: now,
       };
       s.snapshot.clients.push(client);
@@ -212,8 +234,11 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
           active: true,
           phone: input.phone?.trim() || null,
           redtailId: input.redtailId?.trim() || null,
+          revenue: input.revenue,
           heldAway: input.heldAway,
           heldAwayNote: input.heldAwayNote?.trim() || null,
+          familyId: null,
+          familyRole: null,
           createdAt: now,
         };
         s.snapshot.clients.push(client);
@@ -249,6 +274,9 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         if (patch.tier !== undefined) client.tier = patch.tier;
         if (patch.active !== undefined) client.active = patch.active;
         if (patch.phone !== undefined) client.phone = patch.phone?.trim() || null;
+        if (patch.revenue !== undefined) client.revenue = patch.revenue;
+        if (patch.familyId !== undefined) client.familyId = patch.familyId;
+        if (patch.familyRole !== undefined) client.familyRole = patch.familyRole;
         if (patch.heldAway !== undefined) client.heldAway = patch.heldAway;
         if (patch.heldAwayNote !== undefined) client.heldAwayNote = patch.heldAwayNote?.trim() || null;
         if (tierChanged) recomputeClient(id);
@@ -327,6 +355,9 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         if (patch.tier !== undefined) client.tier = patch.tier;
         if (patch.active !== undefined) client.active = patch.active;
         if (patch.phone !== undefined) client.phone = patch.phone?.trim() || null;
+        if (patch.revenue !== undefined) client.revenue = patch.revenue;
+        if (patch.familyId !== undefined) client.familyId = patch.familyId;
+        if (patch.familyRole !== undefined) client.familyRole = patch.familyRole;
         if (patch.heldAway !== undefined) client.heldAway = patch.heldAway;
         if (patch.heldAwayNote !== undefined) client.heldAwayNote = patch.heldAwayNote?.trim() || null;
         if (tierChanged) recomputeClient(clientId);
@@ -342,6 +373,82 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       s.snapshot.contactEvents = s.snapshot.contactEvents.filter((e) => e.clientId !== clientId);
       s.snapshot.dueDates = s.snapshot.dueDates.filter((d) => d.clientId !== clientId);
       s.snapshot.tasks = s.snapshot.tasks.filter((t) => t.clientId !== clientId);
+      cleanupFamilies();
+      persist();
+      return snapshot();
+    },
+
+    // --- Family linking ---
+    async linkFamily(
+      clientIds: string[],
+      familyId: string | null,
+      name: string | null,
+      roles: Record<string, FamilyRole> = {},
+    ) {
+      const s = ensureLoaded();
+      let fid = familyId;
+      if (!fid) {
+        fid = uid();
+        s.snapshot.families.push({
+          id: fid,
+          name: name?.trim() || defaultFamilyName(clientIds),
+          createdAt: new Date().toISOString(),
+        });
+      }
+      for (const id of clientIds) {
+        const c = s.snapshot.clients.find((x) => x.id === id);
+        if (!c) continue;
+        c.familyId = fid;
+        if (roles[id]) c.familyRole = roles[id];
+        else if (!c.familyRole) c.familyRole = "other";
+      }
+      cleanupFamilies();
+      persist();
+      return snapshot();
+    },
+
+    async unlinkFromFamily(clientId: string) {
+      const s = ensureLoaded();
+      const c = s.snapshot.clients.find((x) => x.id === clientId);
+      if (c) {
+        c.familyId = null;
+        c.familyRole = null;
+      }
+      cleanupFamilies();
+      persist();
+      return snapshot();
+    },
+
+    async renameFamily(familyId: string, name: string) {
+      const s = ensureLoaded();
+      const f = s.snapshot.families.find((x) => x.id === familyId);
+      if (f) f.name = name.trim() || f.name;
+      persist();
+      return snapshot();
+    },
+
+    async autoLinkBySurname() {
+      const s = ensureLoaded();
+      const now = new Date().toISOString();
+      const groups = new Map<string, typeof s.snapshot.clients>();
+      for (const c of s.snapshot.clients) {
+        if (c.familyId) continue; // never disturb an existing family
+        const sn = surnameOf(c.householdName);
+        if (!sn) continue;
+        const g = groups.get(sn);
+        if (g) g.push(c);
+        else groups.set(sn, [c]);
+      }
+      for (const [sn, members] of groups) {
+        if (members.length < 2) continue;
+        const fid = uid();
+        const display = sn.charAt(0).toUpperCase() + sn.slice(1);
+        s.snapshot.families.push({ id: fid, name: `${display} Family`, createdAt: now });
+        members.forEach((c, i) => {
+          c.familyId = fid;
+          c.familyRole = i === 0 ? "head" : "other";
+        });
+      }
       persist();
       return snapshot();
     },

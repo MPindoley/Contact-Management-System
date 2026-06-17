@@ -36,8 +36,11 @@ function mkClient(overrides: Partial<Client> = {}): Client {
     active: true,
     phone: null,
     redtailId: null,
+    revenue: null,
     heldAway: false,
     heldAwayNote: null,
+    familyId: null,
+    familyRole: null,
     createdAt: "2024-01-01T00:00:00.000Z",
     ...overrides,
   };
