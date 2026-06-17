@@ -7,7 +7,7 @@ import { useApp } from "../lib/store";
 import { latestContactFor, nextDueFor } from "../lib/selectors";
 import { clientScore } from "../engine/serviceEngine";
 import { outreachCandidates } from "../engine/outreach";
-import { ADVISOR_LABELS, type AdvisorAssignment, type Tier } from "../types";
+import { ADVISOR_LABELS, TIERS, TIER_RANK, type AdvisorAssignment, type Tier } from "../types";
 import { formatShort } from "../lib/dates";
 import { AdvisorChip, DuePhrase, ScorePill, TierBadge } from "../components/badges";
 import { ClientFormModal } from "../components/ClientFormModal";
@@ -16,7 +16,6 @@ import { EmptyState } from "../components/EmptyState";
 import { Button, Input, Select } from "../components/ui";
 import { PlusIcon, SearchIcon, SunriseIcon, UsersIcon } from "../components/icons";
 
-const TIER_ORDER: Record<Tier, number> = { A: 0, B: 1, C: 2 };
 type ClientSortKey = "household" | "tier" | "score";
 
 export function Clients() {
@@ -29,6 +28,21 @@ export function Clients() {
     () => (data ? outreachCandidates(data.clients, data.contactEvents, data.dueDates).length : 0),
     [data],
   );
+
+  // Same household appearing in more than one book — usually a CSV that mixed
+  // advisors. Surface them so the wrong-book copy can be deleted.
+  const duplicateGroups = useMemo(() => {
+    if (!data) return [];
+    const byName = new Map<string, typeof data.clients>();
+    for (const c of data.clients) {
+      const key = c.householdName.trim().toLowerCase();
+      const g = byName.get(key);
+      if (g) g.push(c);
+      else byName.set(key, [c]);
+    }
+    return [...byName.values()].filter((g) => g.length > 1);
+  }, [data]);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<"all" | Tier>("all");
   // Default to the signed-in advisor's own book so they don't reset the
@@ -62,7 +76,7 @@ export function Clients() {
     return mapped.sort((a, b) => {
       let primary = 0;
       if (sort.key === "household") primary = byName(a, b);
-      else if (sort.key === "tier") primary = TIER_ORDER[a.client.tier] - TIER_ORDER[b.client.tier];
+      else if (sort.key === "tier") primary = TIER_RANK[a.client.tier] - TIER_RANK[b.client.tier];
       else primary = a.score - b.score;
       return (primary || byName(a, b)) * sort.dir;
     });
@@ -113,6 +127,46 @@ export function Clients() {
         </div>
       )}
 
+      {duplicateGroups.length > 0 && (
+        <div className="rounded-xl border border-clay-300 bg-clay-50 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm leading-snug text-clay-900">
+              <span className="font-semibold">
+                {duplicateGroups.length} {duplicateGroups.length === 1 ? "household appears" : "households appear"} in more than one book
+              </span>{" "}
+              — likely a CSV that mixed advisors. Open the wrong copy and delete it.
+            </p>
+            <Button variant="secondary" onClick={() => setShowDuplicates((v) => !v)}>
+              {showDuplicates ? "Hide" : "Review duplicates"}
+            </Button>
+          </div>
+          {showDuplicates && (
+            <ul className="mt-3 space-y-2">
+              {duplicateGroups.map((group) => (
+                <li key={group[0].householdName} className="rounded-lg bg-white p-2.5">
+                  <p className="text-[13px] font-semibold">{group[0].householdName}</p>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {group.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => navigate(`/clients/${c.id}`)}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-stone-200 px-2 py-1 text-xs hover:bg-stone-50"
+                      >
+                        <TierBadge tier={c.tier} />
+                        <AdvisorChip advisor={c.assignedAdvisor} />
+                        {!c.active && <span className="text-stone-400">inactive</span>}
+                        <span className="text-stone-400">→</span>
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400" />
@@ -130,9 +184,11 @@ export function Clients() {
             aria-label="Filter by tier"
           >
             <option value="all">All tiers</option>
-            <option value="A">Tier A</option>
-            <option value="B">Tier B</option>
-            <option value="C">Tier C</option>
+            {TIERS.map((t) => (
+              <option key={t} value={t}>
+                Tier {t}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="w-44">

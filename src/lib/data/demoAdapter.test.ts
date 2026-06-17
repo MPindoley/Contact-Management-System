@@ -22,7 +22,7 @@ describe("demo adapter — full service loop", () => {
     const open = snap.tasks.filter((t) => t.status === "open");
 
     expect(snap.clients.length).toBeGreaterThanOrEqual(12);
-    expect(snap.serviceModels).toHaveLength(3);
+    expect(snap.serviceModels).toHaveLength(4); // S, A, B, C
     expect(open.some((t) => t.type === "call" && t.dueDate === today)).toBe(true);
     expect(open.some((t) => t.type === "meeting" && t.dueDate === today)).toBe(true);
     expect(open.filter((t) => t.dueDate < today).length).toBeGreaterThanOrEqual(3);
@@ -99,6 +99,8 @@ describe("demo adapter — full service loop", () => {
       tier: "A",
       phone: null,
       redtailId: null,
+      heldAway: false,
+      heldAwayNote: null,
       lastMeetingDate: addDays(today, -10),
       lastCallDate: addDays(today, -35), // call overdue for Tier A (30d)
     });
@@ -136,6 +138,8 @@ describe("demo adapter — full service loop", () => {
       tier: "A",
       meetingIntervalDays: 90,
       callIntervalDays: 7,
+      minRevenue: null,
+      description: null,
     });
     for (const c of reflowed.clients.filter((x) => x.tier === "A")) {
       const due = reflowed.dueDates.find((d) => d.clientId === c.id && d.type === "call");
@@ -188,6 +192,8 @@ describe("demo adapter — full service loop", () => {
       tier: "C",
       phone: "419-555-0199",
       redtailId: "999",
+      heldAway: false,
+      heldAwayNote: null,
       lastMeetingDate: null,
       lastCallDate: null,
     });

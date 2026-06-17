@@ -16,7 +16,7 @@ create extension if not exists pgcrypto;
 -- ---------------------------------------------------------------------------
 create type advisor_assignment as enum ('matt', 'advisor_b', 'joint');
 create type user_role         as enum ('advisor', 'assistant');
-create type client_tier       as enum ('A', 'B', 'C');
+create type client_tier       as enum ('S', 'A', 'B', 'C');
 create type contact_type      as enum ('meeting', 'call', 'voicemail', 'admin');
 create type touch_type        as enum ('meeting', 'call');
 create type task_priority     as enum ('high', 'medium', 'low');
@@ -51,6 +51,8 @@ create table clients (
   active           boolean not null default true,
   phone            text,
   redtail_id       text unique,
+  held_away        boolean not null default false,
+  held_away_note   text,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
@@ -64,6 +66,8 @@ create table service_models (
   tier                  client_tier primary key,
   meeting_interval_days int not null check (meeting_interval_days between 1 and 1095),
   call_interval_days    int not null check (call_interval_days between 1 and 1095),
+  min_revenue           numeric,   -- tier criteria: AUM/revenue floor (editable)
+  description           text,      -- what earns a household this tier
   updated_at            timestamptz not null default now()
 );
 
@@ -464,10 +468,11 @@ end $$;
 -- Seed data — the rules and the people. No demo clients here: a real backend
 -- starts clean and Phase 1 clients are entered by hand in the app.
 -- ============================================================================
-insert into service_models (tier, meeting_interval_days, call_interval_days) values
-  ('A',  90,  30),   -- quarterly meeting, monthly call   (~16 touches/yr)
-  ('B', 365,  90),   -- annual meeting, quarterly call    (~5 touches/yr)
-  ('C', 365, 180);   -- annual meeting, semiannual call   (~3 touches/yr)
+insert into service_models (tier, meeting_interval_days, call_interval_days, min_revenue, description) values
+  ('S',  90,  30, 250000, 'Your very top households — protect these above all.'),
+  ('A',  90,  30, 100000, 'Core high-value households.'),
+  ('B', 365,  90,  25000, 'The steady middle of the book.'),
+  ('C', 365, 180,   null, 'Lighter-touch relationships, kept warm.');
 
 -- Set real emails before inviting people, so signups auto-link to profiles:
 --   update users set email = 'matt@yourfirm.com' where advisor_key = 'matt';

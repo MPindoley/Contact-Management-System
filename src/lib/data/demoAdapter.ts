@@ -169,6 +169,8 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         active: true,
         phone: input.phone?.trim() || null,
         redtailId: input.redtailId?.trim() || null,
+        heldAway: input.heldAway,
+        heldAwayNote: input.heldAwayNote?.trim() || null,
         createdAt: now,
       };
       s.snapshot.clients.push(client);
@@ -198,7 +200,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       return snapshot();
     },
 
-    async importClients(inputs: AddClientInput[]) {
+    async importClients(inputs: AddClientInput[], updates: Array<{ id: string; patch: UpdateClientInput }> = []) {
       const s = ensureLoaded();
       const now = new Date().toISOString();
       for (const input of inputs) {
@@ -210,6 +212,8 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
           active: true,
           phone: input.phone?.trim() || null,
           redtailId: input.redtailId?.trim() || null,
+          heldAway: input.heldAway,
+          heldAwayNote: input.heldAwayNote?.trim() || null,
           createdAt: now,
         };
         s.snapshot.clients.push(client);
@@ -234,6 +238,22 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         }
         recomputeClient(client.id);
       }
+
+      // Reconcile existing households — client fields only, never contacts.
+      for (const { id, patch } of updates) {
+        const client = s.snapshot.clients.find((c) => c.id === id);
+        if (!client) continue;
+        const tierChanged = patch.tier !== undefined && patch.tier !== client.tier;
+        if (patch.householdName !== undefined) client.householdName = patch.householdName.trim();
+        if (patch.assignedAdvisor !== undefined) client.assignedAdvisor = patch.assignedAdvisor;
+        if (patch.tier !== undefined) client.tier = patch.tier;
+        if (patch.active !== undefined) client.active = patch.active;
+        if (patch.phone !== undefined) client.phone = patch.phone?.trim() || null;
+        if (patch.heldAway !== undefined) client.heldAway = patch.heldAway;
+        if (patch.heldAwayNote !== undefined) client.heldAwayNote = patch.heldAwayNote?.trim() || null;
+        if (tierChanged) recomputeClient(id);
+      }
+
       rebuild(todayISO());
       return snapshot();
     },
@@ -306,6 +326,9 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         if (patch.assignedAdvisor !== undefined) client.assignedAdvisor = patch.assignedAdvisor;
         if (patch.tier !== undefined) client.tier = patch.tier;
         if (patch.active !== undefined) client.active = patch.active;
+        if (patch.phone !== undefined) client.phone = patch.phone?.trim() || null;
+        if (patch.heldAway !== undefined) client.heldAway = patch.heldAway;
+        if (patch.heldAwayNote !== undefined) client.heldAwayNote = patch.heldAwayNote?.trim() || null;
         if (tierChanged) recomputeClient(clientId);
         rebuild(todayISO());
       }

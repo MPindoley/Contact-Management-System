@@ -10,6 +10,8 @@ import {
   clientInScope,
   scopeFor,
   ADVISOR_LABELS,
+  TIER_RANK,
+  TIERS,
   type AdvisorAssignment,
   type Client,
   type Task,
@@ -17,7 +19,7 @@ import {
   type TouchType,
 } from "../types";
 import { formatShort } from "../lib/dates";
-import { AdvisorChip, DuePhrase, OutreachBadge, PriorityPill, TierBadge, TypeChip } from "../components/badges";
+import { AdvisorChip, DuePhrase, HeldAwayBadge, OutreachBadge, PriorityPill, TierBadge, TypeChip } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
 import { PhoneLink } from "../components/PhoneLink";
 import { SnoozeButton } from "../components/SnoozeButton";
@@ -30,7 +32,6 @@ import { dueLabel } from "../lib/dates";
 type AdvisorFilter = "mine" | "all" | AdvisorAssignment;
 type SortKey = "severity" | "due" | "household" | "tier" | "type";
 
-const TIER_ORDER: Record<Tier, number> = { A: 0, B: 1, C: 2 };
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 
 export function ActionQueue() {
@@ -70,14 +71,14 @@ export function ActionQueue() {
           if (pri !== 0) return pri;
           const od = b.task.daysOverdue - a.task.daysOverdue;
           if (od !== 0) return od;
-          return TIER_ORDER[a.client.tier] - TIER_ORDER[b.client.tier];
+          return TIER_RANK[a.client.tier] - TIER_RANK[b.client.tier];
         }
         case "due":
           return a.task.dueDate.localeCompare(b.task.dueDate);
         case "household":
           return a.client.householdName.localeCompare(b.client.householdName);
         case "tier":
-          return TIER_ORDER[a.client.tier] - TIER_ORDER[b.client.tier];
+          return TIER_RANK[a.client.tier] - TIER_RANK[b.client.tier];
         case "type":
           return a.task.type.localeCompare(b.task.type);
       }
@@ -170,9 +171,11 @@ export function ActionQueue() {
             aria-label="Filter by tier"
           >
             <option value="all">All tiers</option>
-            <option value="A">Tier A</option>
-            <option value="B">Tier B</option>
-            <option value="C">Tier C</option>
+            {TIERS.map((t) => (
+              <option key={t} value={t}>
+                Tier {t}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="w-44">
@@ -224,6 +227,7 @@ export function ActionQueue() {
                     <span className="flex items-center gap-2 font-semibold">
                       {client.householdName}
                       {outreach.has(`${task.clientId}:${task.type}`) && <OutreachBadge />}
+                      {client.heldAway && <HeldAwayBadge note={client.heldAwayNote} />}
                     </span>
                     {task.type === "call" && client.phone && (
                       <PhoneLink phone={client.phone} className="mt-0.5 text-[13px]" />

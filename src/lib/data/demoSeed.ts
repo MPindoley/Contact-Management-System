@@ -14,9 +14,10 @@ export const DEMO_USERS: User[] = [
 ];
 
 export const DEFAULT_SERVICE_MODELS: ServiceModel[] = [
-  { tier: "A", meetingIntervalDays: 90, callIntervalDays: 30 },
-  { tier: "B", meetingIntervalDays: 365, callIntervalDays: 90 },
-  { tier: "C", meetingIntervalDays: 365, callIntervalDays: 180 },
+  { tier: "S", meetingIntervalDays: 90, callIntervalDays: 30, minRevenue: 250000, description: "Your very top households — the relationships you protect above all." },
+  { tier: "A", meetingIntervalDays: 90, callIntervalDays: 30, minRevenue: 100000, description: "Core high-value households." },
+  { tier: "B", meetingIntervalDays: 365, callIntervalDays: 90, minRevenue: 25000, description: "The steady middle of the book." },
+  { tier: "C", meetingIntervalDays: 365, callIntervalDays: 180, minRevenue: null, description: "Lighter-touch relationships, kept warm." },
 ];
 
 interface SeedSpec {
@@ -34,8 +35,8 @@ interface SeedSpec {
 // 6 overdue items across all severities, and a lively 14-day horizon.
 const SPECS: SeedSpec[] = [
   // Tier A — meeting every 90, call every 30
-  { name: "Whitfield, Daniel & Mara",   tier: "A", advisor: "matt",      lastMeeting: -90,  lastCall: -12,  discipline: 1.0 },
-  { name: "Castellanos Family",         tier: "A", advisor: "matt",      lastMeeting: -45,  lastCall: -30,  discipline: 1.05 },
+  { name: "Whitfield, Daniel & Mara",   tier: "S", advisor: "matt",      lastMeeting: -90,  lastCall: -12,  discipline: 1.0 },
+  { name: "Castellanos Family",         tier: "S", advisor: "matt",      lastMeeting: -45,  lastCall: -30,  discipline: 1.05 },
   { name: "Okafor, Samuel & Adaeze",    tier: "A", advisor: "advisor_b", lastMeeting: -60,  lastCall: -42,  discipline: 1.4 },
   { name: "Hale-Brennan Household",     tier: "A", advisor: "joint",     lastMeeting: -113, lastCall: -25,  discipline: 1.25 },
   { name: "Vogel, Peter & Anneliese",   tier: "A", advisor: "matt",      lastMeeting: -30,  lastCall: -8,   discipline: 1.0 },
@@ -126,6 +127,8 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
       active: true,
       phone: `(419) ${exchange}-${line}`,
       redtailId: String(48200 + i * 37),
+      heldAway: i % 5 === 0,
+      heldAwayNote: i % 5 === 0 ? "~$180k 401(k) still at a previous custodian." : null,
       createdAt: `${addDays(today, oldest)}T09:00:00.000Z`,
     });
 

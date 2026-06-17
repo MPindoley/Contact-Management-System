@@ -20,9 +20,9 @@ import type { Client, ContactEvent, ServiceModel, Task } from "../types";
 const TODAY = "2026-06-11";
 
 const MODELS: ServiceModel[] = [
-  { tier: "A", meetingIntervalDays: 90, callIntervalDays: 30 },
-  { tier: "B", meetingIntervalDays: 365, callIntervalDays: 90 },
-  { tier: "C", meetingIntervalDays: 365, callIntervalDays: 180 },
+  { tier: "A", meetingIntervalDays: 90, callIntervalDays: 30, minRevenue: 100000, description: null },
+  { tier: "B", meetingIntervalDays: 365, callIntervalDays: 90, minRevenue: 25000, description: null },
+  { tier: "C", meetingIntervalDays: 365, callIntervalDays: 180, minRevenue: null, description: null },
 ];
 
 let seq = 0;
@@ -36,6 +36,8 @@ function mkClient(overrides: Partial<Client> = {}): Client {
     active: true,
     phone: null,
     redtailId: null,
+    heldAway: false,
+    heldAwayNote: null,
     createdAt: "2024-01-01T00:00:00.000Z",
     ...overrides,
   };

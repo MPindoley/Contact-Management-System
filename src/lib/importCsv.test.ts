@@ -17,8 +17,8 @@ const baseOptions = (overrides: Partial<ImportOptions> = {}): ImportOptions => (
   defaultTier: "B",
   advisorValueMap: {},
   thresholds: null,
-  existingNames: new Set(),
-  existingRedtailIds: new Set(),
+  existingClients: [],
+  applyUpdates: true,
   ...overrides,
 });
 
@@ -128,11 +128,11 @@ describe("buildImportPreview", () => {
     const preview = buildImportPreview(csv, options);
 
     expect(preview.skippedNoName).toBe(1);
-    expect(preview.readyCount).toBe(3);
+    expect(preview.newCount).toBe(3);
     expect(preview.duplicateCount).toBe(1); // Castellanos repeated in-file
-    expect(preview.tierCounts).toEqual({ A: 1, B: 1, C: 1 });
+    expect(preview.tierCounts).toEqual({ S: 0, A: 1, B: 1, C: 1 });
 
-    const whitfield = preview.rows.find((r) => r.input.householdName.startsWith("Whitfield"))!;
+    const whitfield = preview.rows.find((r) => r.householdName.startsWith("Whitfield"))!;
     expect(whitfield.input).toMatchObject({
       assignedAdvisor: "matt",
       tier: "A",
@@ -141,34 +141,84 @@ describe("buildImportPreview", () => {
       redtailId: "48200",
     });
 
-    const abernathy = preview.rows.find((r) => r.input.householdName.startsWith("Abernathy"))!;
-    expect(abernathy.input.assignedAdvisor).toBe("joint");
-    expect(abernathy.input.tier).toBe("C");
-    expect(abernathy.input.lastCallDate).toBeNull();
+    const abernathy = preview.rows.find((r) => r.householdName.startsWith("Abernathy"))!;
+    expect(abernathy.input!.assignedAdvisor).toBe("joint");
+    expect(abernathy.input!.tier).toBe("C");
+    expect(abernathy.input!.lastCallDate).toBeNull();
     expect(abernathy.warnings.some((w) => w.includes("bad-date"))).toBe(true);
   });
 
-  it("marks rows that already exist in the book as duplicates", () => {
+  it("updates an existing household when the CSV differs, history untouched", () => {
     const preview = buildImportPreview(
       csv,
       baseOptions({
         mapping: options.mapping,
         advisorValueMap: options.advisorValueMap,
         thresholds: options.thresholds,
-        existingNames: new Set(["whitfield, daniel & mara"]),
-        existingRedtailIds: new Set(["48237"]),
+        existingClients: [
+          // Whitfield exists at Tier C with no phone → should update to A.
+          { id: "x1", householdName: "Whitfield, Daniel & Mara", tier: "C", assignedAdvisor: "matt", phone: null, redtailId: "48200", heldAway: false },
+          // Castellanos already Tier B / Beau → matches the CSV → unchanged.
+          { id: "x2", householdName: "Castellanos Family", tier: "B", assignedAdvisor: "advisor_b", phone: null, redtailId: "48237", heldAway: false },
+        ],
       }),
     );
-    expect(preview.duplicateCount).toBe(3); // both existing + the in-file repeat
-    expect(preview.readyCount).toBe(1);
+
+    expect(preview.newCount).toBe(1); // only Abernathy is new now
+    expect(preview.updateCount).toBe(1); // Whitfield
+    expect(preview.unchangedCount).toBe(1); // Castellanos (first occurrence)
+    expect(preview.duplicateCount).toBe(1); // Castellanos second occurrence
+
+    const whitfield = preview.rows.find((r) => r.householdName.startsWith("Whitfield"))!;
+    expect(whitfield.status).toBe("update");
+    expect(whitfield.existingId).toBe("x1");
+    expect(whitfield.patch).toEqual({ tier: "A" });
+    expect(whitfield.changes).toContain("Tier C → A");
+    // Crucially, an update carries no contact-history seeding.
+    expect(whitfield.input).toBeUndefined();
+  });
+
+  it("does not touch fields the CSV doesn't explicitly specify", () => {
+    // No tier or revenue column → tier is a default, so it must NOT overwrite.
+    const tiny = parseCsv("Name,Phone\nExisting Household,(419) 555-1212");
+    const preview = buildImportPreview(
+      tiny,
+      baseOptions({
+        mapping: { householdName: 0, phone: 1 },
+        existingClients: [
+          { id: "e1", householdName: "Existing Household", tier: "A", assignedAdvisor: "advisor_b", phone: null, redtailId: null, heldAway: false },
+        ],
+      }),
+    );
+    const row = preview.rows[0];
+    expect(row.status).toBe("update");
+    expect(row.patch).toEqual({ phone: "(419) 555-1212" }); // phone only; tier A preserved
+    expect(row.changes).toEqual(["Phone added"]);
+  });
+
+  it("respects applyUpdates=false (matched rows become unchanged)", () => {
+    const tiny = parseCsv("Name,Tier\nExisting Household,A");
+    const preview = buildImportPreview(
+      tiny,
+      baseOptions({
+        mapping: { householdName: 0, tier: 1 },
+        applyUpdates: false,
+        existingClients: [
+          { id: "e1", householdName: "Existing Household", tier: "C", assignedAdvisor: "matt", phone: null, redtailId: null, heldAway: false },
+        ],
+      }),
+    );
+    expect(preview.updateCount).toBe(0);
+    expect(preview.unchangedCount).toBe(1);
+    expect(preview.rows[0].patch).toBeUndefined();
   });
 
   it("falls back to defaults when nothing decides tier or advisor", () => {
     const tiny = parseCsv("Name\nSolo Household");
     const preview = buildImportPreview(tiny, baseOptions({ mapping: { householdName: 0 } }));
-    expect(preview.rows[0].input.tier).toBe("B");
-    expect(preview.rows[0].input.assignedAdvisor).toBe("matt");
-    expect(preview.rows[0].input.lastMeetingDate).toBeNull();
+    expect(preview.rows[0].input!.tier).toBe("B");
+    expect(preview.rows[0].input!.assignedAdvisor).toBe("matt");
+    expect(preview.rows[0].input!.lastMeetingDate).toBeNull();
   });
 
   it("lists distinct advisor values for the mapping UI", () => {

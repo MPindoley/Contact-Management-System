@@ -95,12 +95,16 @@ interface ClientRow {
   active: boolean;
   phone: string | null;
   redtail_id: string | null;
+  held_away: boolean;
+  held_away_note: string | null;
   created_at: string;
 }
 interface ServiceModelRow {
   tier: Tier;
   meeting_interval_days: number;
   call_interval_days: number;
+  min_revenue: number | null;
+  description: string | null;
 }
 interface ContactEventRow {
   id: string;
@@ -147,12 +151,16 @@ const mapClient = (r: ClientRow): Client => ({
   active: r.active,
   phone: r.phone,
   redtailId: r.redtail_id,
+  heldAway: r.held_away ?? false,
+  heldAwayNote: r.held_away_note,
   createdAt: r.created_at,
 });
 const mapModel = (r: ServiceModelRow): ServiceModel => ({
   tier: r.tier,
   meetingIntervalDays: r.meeting_interval_days,
   callIntervalDays: r.call_interval_days,
+  minRevenue: r.min_revenue,
+  description: r.description,
 });
 const mapEvent = (r: ContactEventRow): ContactEvent => ({
   id: r.id,
@@ -289,6 +297,8 @@ export function createSupabaseAdapter(): DataAdapter {
           tier: input.tier,
           phone: input.phone?.trim() || null,
           redtail_id: input.redtailId?.trim() || null,
+          held_away: input.heldAway,
+          held_away_note: input.heldAwayNote?.trim() || null,
         })
         .select("id")
         .single();
@@ -315,7 +325,7 @@ export function createSupabaseAdapter(): DataAdapter {
       return fetchSnapshot();
     },
 
-    async importClients(inputs: AddClientInput[]) {
+    async importClients(inputs: AddClientInput[], updates: Array<{ id: string; patch: UpdateClientInput }> = []) {
       // Chunked bulk inserts; the database triggers compute due dates and
       // tasks per row, so the queue is live the moment this resolves.
       const CHUNK = 100;
@@ -330,6 +340,8 @@ export function createSupabaseAdapter(): DataAdapter {
               tier: c.tier,
               phone: c.phone?.trim() || null,
               redtail_id: c.redtailId?.trim() || null,
+              held_away: c.heldAway,
+              held_away_note: c.heldAwayNote?.trim() || null,
             })),
           )
           .select("id");
@@ -359,6 +371,22 @@ export function createSupabaseAdapter(): DataAdapter {
           const { error } = await db.from("contact_events").insert(events);
           if (error) throw new Error(`Importing contact history: ${error.message}`);
         }
+      }
+
+      // Reconcile existing households — client fields only. The tier-change
+      // trigger reflows due dates; contact history is never touched.
+      for (const { id, patch } of updates) {
+        const row: Record<string, unknown> = {};
+        if (patch.householdName !== undefined) row.household_name = patch.householdName.trim();
+        if (patch.assignedAdvisor !== undefined) row.assigned_advisor = patch.assignedAdvisor;
+        if (patch.tier !== undefined) row.tier = patch.tier;
+        if (patch.active !== undefined) row.active = patch.active;
+        if (patch.phone !== undefined) row.phone = patch.phone?.trim() || null;
+        if (patch.heldAway !== undefined) row.held_away = patch.heldAway;
+        if (patch.heldAwayNote !== undefined) row.held_away_note = patch.heldAwayNote?.trim() || null;
+        if (Object.keys(row).length === 0) continue;
+        const { error } = await db.from("clients").update(row).eq("id", id);
+        if (error) throw new Error(`Updating ${id}: ${error.message}`);
       }
       return fetchSnapshot();
     },
@@ -407,6 +435,8 @@ export function createSupabaseAdapter(): DataAdapter {
       if (patch.tier !== undefined) row.tier = patch.tier;
       if (patch.active !== undefined) row.active = patch.active;
       if (patch.phone !== undefined) row.phone = patch.phone?.trim() || null;
+      if (patch.heldAway !== undefined) row.held_away = patch.heldAway;
+      if (patch.heldAwayNote !== undefined) row.held_away_note = patch.heldAwayNote?.trim() || null;
 
       const { error } = await db.from("clients").update(row).eq("id", clientId);
       if (error) throw new Error(`Updating client: ${error.message}`);
@@ -427,6 +457,8 @@ export function createSupabaseAdapter(): DataAdapter {
         .update({
           meeting_interval_days: model.meetingIntervalDays,
           call_interval_days: model.callIntervalDays,
+          min_revenue: model.minRevenue,
+          description: model.description?.trim() || null,
         })
         .eq("tier", model.tier);
       if (error) throw new Error(`Updating service model: ${error.message}`);

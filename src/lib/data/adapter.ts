@@ -25,8 +25,15 @@ export interface DataAdapter {
   load(): Promise<DataSnapshot>;
   logContact(input: LogContactInput): Promise<DataSnapshot>;
   addClient(input: AddClientInput): Promise<DataSnapshot>;
-  /** Phase 2: bulk import from the CSV wizard. */
-  importClients(inputs: AddClientInput[]): Promise<DataSnapshot>;
+  /**
+   * Phase 2: bulk import/reconcile from the CSV wizard. Creates new
+   * households and applies field updates (tier/advisor/phone) to existing
+   * ones — never touching their logged contact history.
+   */
+  importClients(
+    creates: AddClientInput[],
+    updates: Array<{ id: string; patch: UpdateClientInput }>,
+  ): Promise<DataSnapshot>;
   /** Correct a mis-logged touch; recomputes due dates. */
   updateContactEvent(eventId: string, patch: UpdateContactInput): Promise<DataSnapshot>;
   /** Remove a touch logged in error; recomputes due dates. */

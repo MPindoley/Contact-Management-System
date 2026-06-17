@@ -8,7 +8,7 @@ import { useLogContact } from "../components/LogContactModal";
 import { clientScore, modelFor } from "../engine/serviceEngine";
 import { addDays, formatMedium, formatMonth, formatShort, monthKey } from "../lib/dates";
 import { ADVISOR_LABELS, type ContactEvent, type TouchType } from "../types";
-import { AdvisorChip, DuePhrase, TierBadge, TypeChip } from "../components/badges";
+import { AdvisorChip, DuePhrase, HeldAwayBadge, TierBadge, TypeChip } from "../components/badges";
 import { ScoreRing } from "../components/ScoreRing";
 import { ClientFormModal } from "../components/ClientFormModal";
 import { EditContactModal } from "../components/EditContactModal";
@@ -99,12 +99,18 @@ export function ClientProfile() {
               <TierBadge tier={client.tier} label />
               <AdvisorChip advisor={client.assignedAdvisor} />
               {client.phone && <PhoneLink phone={client.phone} className="text-[13px]" />}
+              {client.heldAway && <HeldAwayBadge note={client.heldAwayNote} />}
               <span className="text-xs text-stone-400">
                 Meeting every {derived.model.meetingIntervalDays}d · call every{" "}
                 {derived.model.callIntervalDays}d
                 {client.redtailId ? ` · Redtail #${client.redtailId}` : ""}
               </span>
             </div>
+            {client.heldAway && client.heldAwayNote && (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[13px] font-medium text-emerald-900">
+                💰 {client.heldAwayNote}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={() => setEditing(true)}>Edit</Button>

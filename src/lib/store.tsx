@@ -57,7 +57,10 @@ interface AppContextValue {
   refresh(): Promise<void>;
   logContact(input: LogContactInput): Promise<DueDate[]>;
   addClient(input: AddClientInput): Promise<Client | null>;
-  importClients(inputs: AddClientInput[]): Promise<void>;
+  importClients(
+    creates: AddClientInput[],
+    updates: Array<{ id: string; patch: UpdateClientInput }>,
+  ): Promise<void>;
   updateContactEvent(eventId: string, patch: UpdateContactInput): Promise<void>;
   deleteContactEvent(eventId: string): Promise<void>;
   snoozeTouch(clientId: string, type: TouchType, untilDate: string | null): Promise<void>;
@@ -287,7 +290,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const importClients = useCallback(
-    (inputs: AddClientInput[]) => run(() => adapter.importClients(inputs)),
+    (creates: AddClientInput[], updates: Array<{ id: string; patch: UpdateClientInput }>) =>
+      run(() => adapter.importClients(creates, updates)),
     [adapter, run],
   );
 

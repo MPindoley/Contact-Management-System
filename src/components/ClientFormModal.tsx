@@ -36,6 +36,8 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
   const [active, setActive] = useState(client?.active ?? true);
   const [phone, setPhone] = useState(client?.phone ?? "");
   const [redtailId, setRedtailId] = useState(client?.redtailId ?? "");
+  const [heldAway, setHeldAway] = useState(client?.heldAway ?? false);
+  const [heldAwayNote, setHeldAwayNote] = useState(client?.heldAwayNote ?? "");
   const [lastMeeting, setLastMeeting] = useState(todayISO());
   const [lastCall, setLastCall] = useState(todayISO());
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -67,6 +69,8 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           tier,
           active,
           phone: phone.trim() || null,
+          heldAway,
+          heldAwayNote: heldAwayNote.trim() || null,
         });
         toast.push(
           tier !== client.tier
@@ -81,6 +85,8 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           tier,
           phone: phone.trim() || null,
           redtailId: redtailId || null,
+          heldAway,
+          heldAwayNote: heldAwayNote.trim() || null,
           lastMeetingDate: lastMeeting || null,
           lastCallDate: lastCall || null,
         });
@@ -129,6 +135,31 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
             placeholder="(419) 555-1234"
           />
         </Field>
+
+        <div className="rounded-lg border border-stone-200 p-3">
+          <label className="flex cursor-pointer items-start gap-2.5 select-none">
+            <input
+              type="checkbox"
+              checked={heldAway}
+              onChange={(e) => setHeldAway(e.target.checked)}
+              className="mt-0.5 size-4 cursor-pointer accent-emerald-700"
+            />
+            <span className="text-[13px] leading-snug text-ink">
+              <span className="font-medium">Money to capture</span>
+              <span className="block text-xs text-stone-400">
+                Held-away assets or money due — flagged so it's front of mind when you schedule.
+              </span>
+            </span>
+          </label>
+          {heldAway && (
+            <Input
+              className="mt-2.5"
+              value={heldAwayNote}
+              onChange={(e) => setHeldAwayNote(e.target.value)}
+              placeholder="e.g. ~$180k 401(k) at a former employer"
+            />
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Assigned advisor">

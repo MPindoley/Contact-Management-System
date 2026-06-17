@@ -1,7 +1,7 @@
 // Tiny pure helpers for deriving view data from the snapshot.
 
 import type { Client, ContactEvent, DataSnapshot, DueDate, Task } from "../types";
-import { isMeaningfulContact } from "../types";
+import { isMeaningfulContact, TIER_RANK } from "../types";
 
 export function clientsById(data: DataSnapshot): Map<string, Client> {
   return new Map(data.clients.map((c) => [c.id, c]));
@@ -37,15 +37,13 @@ export function outreachKeys(dueDates: DueDate[]): Set<string> {
   );
 }
 
-const TIER_ORDER = { A: 0, B: 1, C: 2 } as const;
-
-/** Sort tasks for a "due today" column: Tier A first, then by name. */
+/** Sort tasks for a "due today" column: top tier first, then by name. */
 export function sortByTierThenName(tasks: Task[], byId: Map<string, Client>): Task[] {
   return [...tasks].sort((a, b) => {
     const ca = byId.get(a.clientId);
     const cb = byId.get(b.clientId);
     if (!ca || !cb) return 0;
-    const tier = TIER_ORDER[ca.tier] - TIER_ORDER[cb.tier];
+    const tier = TIER_RANK[ca.tier] - TIER_RANK[cb.tier];
     return tier !== 0 ? tier : ca.householdName.localeCompare(cb.householdName);
   });
 }

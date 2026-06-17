@@ -1,7 +1,8 @@
 // CSV import engine: parse → map columns → resolve tiers/advisors/dates.
 // Pure functions, unit-tested; the Import screen is a thin wizard over these.
 
-import type { AddClientInput, AdvisorAssignment, Tier } from "../types";
+import type { AddClientInput, AdvisorAssignment, Tier, UpdateClientInput } from "../types";
+import { ADVISOR_LABELS } from "../types";
 
 // ---------------------------------------------------------------------------
 // CSV parsing (RFC 4180: quoted fields, embedded commas/newlines, CRLF, BOM)
@@ -68,6 +69,7 @@ export type ImportField =
   | "tier"
   | "revenue"
   | "phone"
+  | "heldAway"
   | "lastMeetingDate"
   | "lastCallDate"
   | "redtailId";
@@ -80,10 +82,16 @@ const HEADER_HINTS: Record<ImportField, RegExp> = {
   tier: /tier|segment|class(?!ic)|category|level/i,
   revenue: /revenue|aum|assets|value|fee/i,
   phone: /phone|mobile|cell|telephone|^tel$/i,
+  heldAway: /held.?away|outside|elsewhere|capture|money.?due|opportunit/i,
   lastMeetingDate: /last.*(meeting|review|appt|appointment)|meeting.*date/i,
   lastCallDate: /last.*(call|contact|touch)|call.*date/i,
   redtailId: /redtail|crm.?id|contact.?id|^id$/i,
 };
+
+/** Reads loose truthy values from a CSV cell: yes / y / true / 1 / x / ✓. */
+export function parseBoolish(raw: string): boolean {
+  return /^(y|yes|true|t|1|x|✓|✔)$/i.test(raw.trim());
+}
 
 /** Best-effort auto-mapping from header names; user can override in the UI. */
 export function guessMapping(headers: string[]): ColumnMapping {
@@ -111,9 +119,9 @@ export function parseRevenue(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** "A" / "tier b" / "C-class" → Tier (null when unrecognized). */
+/** "S" / "A" / "tier b" / "C-class" → Tier (null when unrecognized). */
 export function parseTier(raw: string): Tier | null {
-  const m = raw.trim().match(/\b([abc])\b/i) ?? raw.trim().match(/^([abc])/i);
+  const m = raw.trim().match(/\b([sabc])\b/i) ?? raw.trim().match(/^([sabc])/i);
   if (!m) return null;
   return m[1].toUpperCase() as Tier;
 }
@@ -157,6 +165,17 @@ export interface TierThresholds {
   b: number;
 }
 
+/** The existing-book fields the importer needs to detect and reconcile. */
+export interface ExistingClientLite {
+  id: string;
+  householdName: string;
+  tier: Tier;
+  assignedAdvisor: AdvisorAssignment;
+  phone: string | null;
+  redtailId: string | null;
+  heldAway: boolean;
+}
+
 export interface ImportOptions {
   mapping: ColumnMapping;
   /** Used when no advisor column is mapped or a value is unmapped. */
@@ -167,24 +186,37 @@ export interface ImportOptions {
   advisorValueMap: Record<string, AdvisorAssignment>;
   /** Auto-assign tier from the revenue column when mapped. */
   thresholds: TierThresholds | null;
-  /** Lowercased household names + redtail ids that already exist. */
-  existingNames: Set<string>;
-  existingRedtailIds: Set<string>;
+  /** The current book — used to match rows and reconcile changed fields. */
+  existingClients: ExistingClientLite[];
+  /** Apply field updates to matched households (false = skip them). */
+  applyUpdates: boolean;
 }
 
+export type ImportRowStatus = "new" | "update" | "unchanged" | "duplicate";
+
 export interface ImportPreviewRow {
-  input: AddClientInput;
   line: number;
-  status: "ready" | "duplicate";
+  householdName: string;
+  status: ImportRowStatus;
+  /** For a new household. */
+  input?: AddClientInput;
+  /** For a matched household: which existing row and what to change. */
+  existingId?: string;
+  patch?: UpdateClientInput;
+  /** Human-readable change list for an update row, e.g. ["Tier B → A"]. */
+  changes: string[];
   /** Soft problems worth knowing about (bad date, unrecognized tier…). */
   warnings: string[];
 }
 
 export interface ImportPreview {
   rows: ImportPreviewRow[];
-  readyCount: number;
+  newCount: number;
+  updateCount: number;
+  unchangedCount: number;
   duplicateCount: number;
   skippedNoName: number;
+  /** Tier distribution of the NEW households (for the cutoff preview). */
   tierCounts: Record<Tier, number>;
 }
 
@@ -198,9 +230,17 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
   const { mapping, thresholds } = options;
   const rows: ImportPreviewRow[] = [];
   let skippedNoName = 0;
-  const tierCounts: Record<Tier, number> = { A: 0, B: 0, C: 0 };
+  const tierCounts: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0 };
   const seenNames = new Set<string>();
   const seenRedtail = new Set<string>();
+
+  // Match an incoming row to the current book by Redtail id, then by name.
+  const byName = new Map<string, ExistingClientLite>();
+  const byRedtail = new Map<string, ExistingClientLite>();
+  for (const c of options.existingClients) {
+    byName.set(c.householdName.trim().toLowerCase(), c);
+    if (c.redtailId) byRedtail.set(c.redtailId, c);
+  }
 
   const cell = (row: string[], field: ImportField): string => {
     const idx = mapping[field];
@@ -216,30 +256,41 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
     }
     const warnings: string[] = [];
 
-    // Advisor
+    // Advisor — "explicit" only when the file actually specifies a known one.
     let advisor = options.defaultAdvisor;
+    let advisorExplicit = false;
     const advisorRaw = cell(raw, "advisor");
     if (advisorRaw) {
       const mapped = options.advisorValueMap[advisorRaw.toLowerCase()];
-      if (mapped) advisor = mapped;
-      else warnings.push(`advisor "${advisorRaw}" not mapped — using ${options.defaultAdvisor}`);
+      if (mapped) {
+        advisor = mapped;
+        advisorExplicit = true;
+      } else {
+        warnings.push(`advisor "${advisorRaw}" not mapped — using ${options.defaultAdvisor}`);
+      }
     }
 
-    // Tier: explicit column wins, then revenue thresholds, then default.
+    // Tier — explicit when a tier column or a revenue cutoff decides it.
     let tier: Tier | null = null;
+    let tierExplicit = false;
     const tierRaw = cell(raw, "tier");
     if (tierRaw) {
       tier = parseTier(tierRaw);
-      if (!tier) warnings.push(`tier "${tierRaw}" not recognized`);
+      if (tier) tierExplicit = true;
+      else warnings.push(`tier "${tierRaw}" not recognized`);
     }
     if (!tier && thresholds && mapping.revenue !== undefined) {
       const revenue = parseRevenue(cell(raw, "revenue"));
-      if (revenue !== null) tier = tierForRevenue(revenue, thresholds);
-      else if (cell(raw, "revenue")) warnings.push(`revenue "${cell(raw, "revenue")}" not a number`);
+      if (revenue !== null) {
+        tier = tierForRevenue(revenue, thresholds);
+        tierExplicit = true;
+      } else if (cell(raw, "revenue")) {
+        warnings.push(`revenue "${cell(raw, "revenue")}" not a number`);
+      }
     }
     tier ??= options.defaultTier;
 
-    // Dates
+    // Dates (only ever used when CREATING — never re-seeded onto existing).
     const meetingRaw = cell(raw, "lastMeetingDate");
     const callRaw = cell(raw, "lastCallDate");
     const lastMeetingDate = parseDateValue(meetingRaw);
@@ -248,39 +299,75 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
     if (callRaw && !lastCallDate) warnings.push(`couldn't read call date "${callRaw}"`);
 
     const redtailId = cell(raw, "redtailId") || null;
-    const phone = cell(raw, "phone") || null;
-
-    // Duplicates: against the existing book and within the file itself.
+    const phoneRaw = cell(raw, "phone");
+    const phone = phoneRaw || null;
+    // Held-away money flag — only "explicit" when the column is mapped.
+    const heldAwayProvided = mapping.heldAway !== undefined;
+    const heldAway = heldAwayProvided && parseBoolish(cell(raw, "heldAway"));
     const nameKey = name.toLowerCase();
-    const dupe =
-      options.existingNames.has(nameKey) ||
-      seenNames.has(nameKey) ||
-      (redtailId !== null &&
-        (options.existingRedtailIds.has(redtailId) || seenRedtail.has(redtailId)));
+
+    // Second+ time we've seen this household within the file → skip it.
+    if (seenNames.has(nameKey) || (redtailId && seenRedtail.has(redtailId))) {
+      rows.push({ line, householdName: name, status: "duplicate", changes: [], warnings });
+      return;
+    }
     seenNames.add(nameKey);
     if (redtailId) seenRedtail.add(redtailId);
 
-    if (!dupe) tierCounts[tier]++;
+    const existing = (redtailId && byRedtail.get(redtailId)) || byName.get(nameKey) || null;
 
+    if (existing) {
+      // Reconcile: only fields the CSV explicitly specifies, only when changed,
+      // and NEVER the contact history (dates are ignored for existing rows).
+      const patch: UpdateClientInput = {};
+      const changes: string[] = [];
+      if (tierExplicit && tier !== existing.tier) {
+        patch.tier = tier;
+        changes.push(`Tier ${existing.tier} → ${tier}`);
+      }
+      if (advisorExplicit && advisor !== existing.assignedAdvisor) {
+        patch.assignedAdvisor = advisor;
+        changes.push(`${ADVISOR_LABELS[existing.assignedAdvisor]} → ${ADVISOR_LABELS[advisor]}`);
+      }
+      if (phone !== null && phone !== existing.phone) {
+        patch.phone = phone;
+        changes.push(existing.phone ? "Phone updated" : "Phone added");
+      }
+      if (heldAwayProvided && heldAway && !existing.heldAway) {
+        patch.heldAway = true;
+        changes.push("Flagged: money to capture");
+      }
+
+      const hasChanges = changes.length > 0 && options.applyUpdates;
+      rows.push({
+        line,
+        householdName: name,
+        status: hasChanges ? "update" : "unchanged",
+        existingId: existing.id,
+        patch: hasChanges ? patch : undefined,
+        changes,
+        warnings,
+      });
+      return;
+    }
+
+    // Brand-new household.
+    tierCounts[tier]++;
     rows.push({
       line,
-      status: dupe ? "duplicate" : "ready",
+      householdName: name,
+      status: "new",
+      changes: [],
       warnings,
-      input: {
-        householdName: name,
-        assignedAdvisor: advisor,
-        tier,
-        phone,
-        redtailId,
-        lastMeetingDate,
-        lastCallDate,
-      },
+      input: { householdName: name, assignedAdvisor: advisor, tier, phone, redtailId, heldAway, heldAwayNote: null, lastMeetingDate, lastCallDate },
     });
   });
 
   return {
     rows,
-    readyCount: rows.filter((r) => r.status === "ready").length,
+    newCount: rows.filter((r) => r.status === "new").length,
+    updateCount: rows.filter((r) => r.status === "update").length,
+    unchangedCount: rows.filter((r) => r.status === "unchanged").length,
     duplicateCount: rows.filter((r) => r.status === "duplicate").length,
     skippedNoName,
     tierCounts,
@@ -300,8 +387,8 @@ export function distinctAdvisorValues(csv: ParsedCsv, mapping: ColumnMapping): s
 }
 
 export const CSV_TEMPLATE = [
-  "Household Name,Advisor,Revenue,Phone,Last Meeting,Last Call,Redtail ID",
-  '"Whitfield, Daniel & Mara",Matt,18500,(419) 555-0182,3/14/2026,5/28/2026,48200',
-  '"Castellanos Family",Beau,9200,(419) 555-0143,1/9/2026,4/2/2026,48237',
-  '"Abernathy, Gordon",Joint,2400,(419) 555-0117,11/20/2025,2/13/2026,48274',
+  "Household Name,Advisor,Revenue,Phone,Money to Capture,Last Meeting,Last Call,Redtail ID",
+  '"Whitfield, Daniel & Mara",Matt,250000,(419) 555-0182,yes,3/14/2026,5/28/2026,48200',
+  '"Castellanos Family",Beau,90000,(419) 555-0143,,1/9/2026,4/2/2026,48237',
+  '"Abernathy, Gordon",Joint,24000,(419) 555-0117,,11/20/2025,2/13/2026,48274',
 ].join("\n");

@@ -11,7 +11,7 @@ import { clientsById, openTasks, outreachKeys, sortByTierThenName } from "../lib
 import { dashboardBuckets } from "../engine/serviceEngine";
 import { clientInScope, scopeFor, type Client, type Task } from "../types";
 import { addDays, formatLong, formatShort, timeOfDayGreeting } from "../lib/dates";
-import { AdvisorChip, DuePhrase, OutreachBadge, TierBadge } from "../components/badges";
+import { AdvisorChip, DuePhrase, HeldAwayBadge, OutreachBadge, TierBadge } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
 import { PhoneLink } from "../components/PhoneLink";
 import { SnoozeButton } from "../components/SnoozeButton";
@@ -254,6 +254,7 @@ function TaskCard({
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <AdvisorChip advisor={client.assignedAdvisor} />
             {isOutreach ? <OutreachBadge /> : <DuePhrase dueDate={task.dueDate} today={today} />}
+            {client.heldAway && <HeldAwayBadge note={client.heldAwayNote} />}
           </div>
           {task.type === "call" && client.phone && (
             <div className="mt-1.5">

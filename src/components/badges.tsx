@@ -7,6 +7,7 @@ import { dueLabel } from "../lib/dates";
 import { CalendarIcon, ClipboardIcon, PhoneIcon, VoicemailIcon } from "./icons";
 
 const TIER_STYLES: Record<Tier, string> = {
+  S: "bg-ink text-gold-200 ring-ink",
   A: "bg-gold-100 text-gold-800 ring-gold-300",
   B: "bg-sky-100 text-sky-800 ring-sky-300",
   C: "bg-stone-100 text-stone-600 ring-stone-300",
@@ -125,6 +126,18 @@ export function ProspectStatusBadge({ status }: { status: ProspectStatus }) {
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${PROSPECT_STATUS_STYLES[status]}`}
     >
       {PROSPECT_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+/** Held-away assets / money due — "there's money out there to capture." */
+export function HeldAwayBadge({ note }: { note?: string | null }) {
+  return (
+    <span
+      title={note || "Held-away assets or money to capture"}
+      className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800 ring-1 ring-emerald-300 ring-inset"
+    >
+      $ Capture
     </span>
   );
 }

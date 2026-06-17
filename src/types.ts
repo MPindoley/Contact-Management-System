@@ -1,7 +1,8 @@
 // Domain types shared across the app. Dates are ISO `YYYY-MM-DD` strings;
 // timestamps are ISO datetime strings.
 
-export type Tier = "A" | "B" | "C";
+// Tiers, top to bottom: S (the very top) → A → B → C.
+export type Tier = "S" | "A" | "B" | "C";
 export type AdvisorAssignment = "matt" | "advisor_b" | "joint";
 export type AdvisorKey = Exclude<AdvisorAssignment, "joint">;
 export type Role = "advisor" | "assistant";
@@ -26,6 +27,9 @@ export interface Client {
   active: boolean;
   phone: string | null;
   redtailId: string | null;
+  /** "There's money out there to capture" — held-away assets / money due. */
+  heldAway: boolean;
+  heldAwayNote: string | null;
   createdAt: string;
 }
 
@@ -33,6 +37,9 @@ export interface ServiceModel {
   tier: Tier;
   meetingIntervalDays: number;
   callIntervalDays: number;
+  /** The criteria that define this tier — editable as the book grows. */
+  minRevenue: number | null;
+  description: string | null;
 }
 
 export interface ContactEvent {
@@ -184,6 +191,8 @@ export interface AddClientInput {
   tier: Tier;
   phone: string | null;
   redtailId: string | null;
+  heldAway: boolean;
+  heldAwayNote: string | null;
   // Seeds the service clock — "when did you last actually touch this client?"
   lastMeetingDate: string | null;
   lastCallDate: string | null;
@@ -195,6 +204,8 @@ export interface UpdateClientInput {
   tier?: Tier;
   active?: boolean;
   phone?: string | null;
+  heldAway?: boolean;
+  heldAwayNote?: string | null;
 }
 
 export const ADVISOR_LABELS: Record<AdvisorAssignment, string> = {
@@ -224,7 +235,9 @@ export const TOUCH_TYPE_LABELS: Record<TouchType, string> = {
   call: "Call",
 };
 
-export const TIERS: Tier[] = ["A", "B", "C"];
+export const TIERS: Tier[] = ["S", "A", "B", "C"];
+/** Sort rank, best first. Use everywhere tiers are ordered. */
+export const TIER_RANK: Record<Tier, number> = { S: 0, A: 1, B: 2, C: 3 };
 export const ADVISOR_KEYS: AdvisorKey[] = ["matt", "advisor_b"];
 
 /** The advisor assignments a user is responsible for (their default scope). */

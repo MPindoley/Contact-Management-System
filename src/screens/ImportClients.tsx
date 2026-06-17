@@ -15,20 +15,21 @@ import {
   parseCsv,
   type ColumnMapping,
   type ImportField,
+  type ImportRowStatus,
   type ParsedCsv,
 } from "../lib/importCsv";
 import { ADVISOR_LABELS, TIERS, type AdvisorAssignment, type Tier } from "../types";
 import { TierBadge, AdvisorChip } from "../components/badges";
 import { Button, Field, Input, Select, Spinner } from "../components/ui";
 import { CheckCircleIcon, UsersIcon } from "../components/icons";
-import { formatShort } from "../lib/dates";
 
 const FIELD_LABELS: Array<{ field: ImportField; label: string; hint: string }> = [
   { field: "householdName", label: "Household name", hint: "Required — rows without one are skipped." },
   { field: "advisor", label: "Advisor", hint: "Map each value below once chosen." },
-  { field: "tier", label: "Tier (A/B/C)", hint: "If your file already has tiers." },
+  { field: "tier", label: "Tier (S/A/B/C)", hint: "If your file already has tiers." },
   { field: "revenue", label: "Revenue / AUM", hint: "Used to auto-assign tiers by cutoff." },
   { field: "phone", label: "Phone number", hint: "Shows up when a call is due." },
+  { field: "heldAway", label: "Money to capture", hint: "yes/x flags held-away assets." },
   { field: "lastMeetingDate", label: "Last meeting date", hint: "Starts the meeting clock." },
   { field: "lastCallDate", label: "Last call date", hint: "Starts the call clock." },
   { field: "redtailId", label: "Redtail ID", hint: "For the future live sync." },
@@ -46,8 +47,12 @@ export function ImportClients() {
   const [defaultAdvisor, setDefaultAdvisor] = useState<AdvisorAssignment>("matt");
   const [defaultTier, setDefaultTier] = useState<Tier>("B");
   const [advisorValueMap, setAdvisorValueMap] = useState<Record<string, AdvisorAssignment>>({});
-  const [thresholdA, setThresholdA] = useState("10000");
-  const [thresholdB, setThresholdB] = useState("4000");
+  // Cutoffs default from the saved tier criteria (editable on the Tiers screen).
+  const savedA = data?.serviceModels.find((m) => m.tier === "A")?.minRevenue;
+  const savedB = data?.serviceModels.find((m) => m.tier === "B")?.minRevenue;
+  const [thresholdA, setThresholdA] = useState(savedA != null ? String(savedA) : "100000");
+  const [thresholdB, setThresholdB] = useState(savedB != null ? String(savedB) : "25000");
+  const [applyUpdates, setApplyUpdates] = useState(true);
   const [parseError, setParseError] = useState<string | null>(null);
 
   async function onFile(file: File) {
@@ -99,21 +104,31 @@ export function ImportClients() {
       defaultTier,
       advisorValueMap,
       thresholds,
-      existingNames: new Set(data.clients.map((c) => c.householdName.toLowerCase())),
-      existingRedtailIds: new Set(
-        data.clients.flatMap((c) => (c.redtailId ? [c.redtailId] : [])),
-      ),
+      applyUpdates,
+      existingClients: data.clients.map((c) => ({
+        id: c.id,
+        householdName: c.householdName,
+        tier: c.tier,
+        assignedAdvisor: c.assignedAdvisor,
+        phone: c.phone,
+        redtailId: c.redtailId,
+        heldAway: c.heldAway,
+      })),
     });
-  }, [csv, mapping, defaultAdvisor, defaultTier, advisorValueMap, thresholds, data]);
+  }, [csv, mapping, defaultAdvisor, defaultTier, advisorValueMap, thresholds, applyUpdates, data]);
 
   async function runImport() {
-    if (!preview || preview.readyCount === 0) return;
-    const inputs = preview.rows.filter((r) => r.status === "ready").map((r) => r.input);
+    if (!preview || preview.newCount + preview.updateCount === 0) return;
+    const creates = preview.rows.filter((r) => r.status === "new").map((r) => r.input!);
+    const updates = preview.rows
+      .filter((r) => r.status === "update")
+      .map((r) => ({ id: r.existingId!, patch: r.patch! }));
     try {
-      await importClients(inputs);
-      toast.push(
-        `${inputs.length} ${inputs.length === 1 ? "household" : "households"} imported — due dates are live on the queue.`,
-      );
+      await importClients(creates, updates);
+      const parts: string[] = [];
+      if (creates.length) parts.push(`${creates.length} added`);
+      if (updates.length) parts.push(`${updates.length} updated`);
+      toast.push(`Import complete — ${parts.join(" · ")}. Contact history untouched.`);
       navigate("/clients");
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Import failed partway — check the Clients list before retrying.", "error");
@@ -322,20 +337,43 @@ export function ImportClients() {
       {/* Step 3 — preview & import */}
       {preview && (
         <section className="card p-5">
-          <StepHeading n={3} title="Preview and import" done={false} />
+          <StepHeading n={3} title="Review and import" done={false} />
+
+          <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 select-none">
+            <input
+              type="checkbox"
+              checked={applyUpdates}
+              onChange={(e) => setApplyUpdates(e.target.checked)}
+              className="mt-0.5 size-4 cursor-pointer accent-pine-700"
+            />
+            <span className="text-[13px] leading-snug text-ink">
+              <span className="font-medium">Update existing households where the CSV differs</span>
+              <span className="block text-xs text-stone-400">
+                Changes tier, advisor, and phone only — logged contact history and service clocks
+                are never touched.
+              </span>
+            </span>
+          </label>
+
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
             <span className="flex items-center gap-1.5 font-medium text-pine-800">
-              <CheckCircleIcon className="size-4" /> {preview.readyCount} ready
+              <CheckCircleIcon className="size-4" /> {preview.newCount} new
             </span>
+            <span className="font-medium text-amber-800">{preview.updateCount} to update</span>
+            {preview.unchangedCount > 0 && (
+              <span className="text-ink-soft">{preview.unchangedCount} unchanged</span>
+            )}
             {preview.duplicateCount > 0 && (
-              <span className="text-ink-soft">{preview.duplicateCount} duplicates skipped</span>
+              <span className="text-ink-soft">{preview.duplicateCount} repeated in file</span>
             )}
             {preview.skippedNoName > 0 && (
-              <span className="text-ink-soft">{preview.skippedNoName} rows without a name skipped</span>
+              <span className="text-ink-soft">{preview.skippedNoName} without a name</span>
             )}
-            <span className="tnum text-ink-soft">
-              {preview.tierCounts.A} A · {preview.tierCounts.B} B · {preview.tierCounts.C} C
-            </span>
+            {preview.newCount > 0 && (
+              <span className="tnum text-ink-soft">
+                new: {preview.tierCounts.A} A · {preview.tierCounts.B} B · {preview.tierCounts.C} C
+              </span>
+            )}
           </div>
 
           <div className="mt-4 max-h-80 overflow-y-auto rounded-lg border border-stone-200">
@@ -343,67 +381,102 @@ export function ImportClients() {
               <thead className="sticky top-0 bg-stone-50">
                 <tr className="border-b border-stone-200 text-left text-[11px] font-semibold tracking-wider text-ink-soft uppercase">
                   <th className="px-3 py-2">Household</th>
+                  <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Tier</th>
                   <th className="px-3 py-2">Advisor</th>
-                  <th className="px-3 py-2">Last meeting</th>
-                  <th className="px-3 py-2">Last call</th>
-                  <th className="px-3 py-2">Notes</th>
+                  <th className="px-3 py-2">What changes</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.rows.slice(0, 200).map((r) => (
+                {preview.rows.slice(0, 250).map((r) => (
                   <tr
                     key={r.line}
                     className={`border-b border-stone-100 last:border-0 ${
-                      r.status === "duplicate" ? "opacity-45" : ""
+                      r.status === "duplicate" || r.status === "unchanged" ? "opacity-50" : ""
                     }`}
                   >
-                    <td className="px-3 py-2 font-medium">{r.input.householdName}</td>
+                    <td className="px-3 py-2 font-medium">{r.householdName}</td>
                     <td className="px-3 py-2">
-                      <TierBadge tier={r.input.tier} />
+                      <ImportStatusBadge status={r.status} />
                     </td>
                     <td className="px-3 py-2">
-                      <AdvisorChip advisor={r.input.assignedAdvisor} />
+                      {r.input ? (
+                        <TierBadge tier={r.input.tier} />
+                      ) : r.patch?.tier ? (
+                        <TierBadge tier={r.patch.tier} />
+                      ) : (
+                        <span className="text-xs text-stone-400">—</span>
+                      )}
                     </td>
-                    <td className="tnum px-3 py-2 text-[13px] text-ink-soft">
-                      {r.input.lastMeetingDate ? formatShort(r.input.lastMeetingDate) : "—"}
+                    <td className="px-3 py-2">
+                      {r.input ? (
+                        <AdvisorChip advisor={r.input.assignedAdvisor} />
+                      ) : (
+                        <span className="text-xs text-stone-400">—</span>
+                      )}
                     </td>
-                    <td className="tnum px-3 py-2 text-[13px] text-ink-soft">
-                      {r.input.lastCallDate ? formatShort(r.input.lastCallDate) : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-stone-400">
-                      {r.status === "duplicate" ? "already in the book" : r.warnings.join("; ")}
+                    <td className="px-3 py-2 text-xs text-ink-soft">
+                      {r.status === "update"
+                        ? r.changes.join(" · ")
+                        : r.status === "duplicate"
+                          ? "repeated earlier in the file"
+                          : r.status === "unchanged"
+                            ? "already matches"
+                            : r.warnings.join("; ")}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {preview.rows.length > 200 && (
+            {preview.rows.length > 250 && (
               <p className="border-t border-stone-100 px-3 py-2 text-center text-xs text-stone-400">
-                Showing the first 200 of {preview.rows.length} rows — the import covers them all.
+                Showing the first 250 of {preview.rows.length} rows — the import covers them all.
               </p>
             )}
           </div>
 
           <div className="mt-4 flex items-center justify-between gap-3">
             <p className="text-xs text-stone-400">
-              Households without last-contact dates get no due dates until you log their first
-              touch — nothing is invented.
+              New households without last-contact dates get no due dates until you log their first
+              touch — nothing is invented, and updates never alter contact history.
             </p>
             <Button
               variant="primary"
-              disabled={preview.readyCount === 0 || busy}
+              disabled={preview.newCount + preview.updateCount === 0 || busy}
               onClick={() => void runImport()}
             >
               {busy && <Spinner className="size-3.5 border-white/40 border-t-white" />}
               <UsersIcon className="size-4" />
-              Import {preview.readyCount} {preview.readyCount === 1 ? "household" : "households"}
+              {importButtonLabel(preview.newCount, preview.updateCount)}
             </Button>
           </div>
         </section>
       )}
     </div>
   );
+}
+
+const STATUS_BADGE: Record<ImportRowStatus, { label: string; cls: string }> = {
+  new: { label: "New", cls: "bg-pine-100 text-pine-800" },
+  update: { label: "Update", cls: "bg-amber-100 text-amber-800" },
+  unchanged: { label: "Unchanged", cls: "bg-stone-100 text-stone-500" },
+  duplicate: { label: "Repeat", cls: "bg-stone-100 text-stone-400" },
+};
+
+function ImportStatusBadge({ status }: { status: ImportRowStatus }) {
+  const s = STATUS_BADGE[status];
+  return (
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function importButtonLabel(newCount: number, updateCount: number): string {
+  const parts: string[] = [];
+  if (newCount) parts.push(`Add ${newCount}`);
+  if (updateCount) parts.push(`update ${updateCount}`);
+  return parts.length === 0 ? "Nothing to apply" : parts.join(" · ");
 }
 
 function StepHeading({ n, title, done }: { n: number; title: string; done: boolean }) {

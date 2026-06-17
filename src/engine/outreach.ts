@@ -8,11 +8,9 @@
 // per weekday, AND the normal 14-day task horizon only surfaces the imminent
 // ones, so most of the backlog stays out of sight until its day approaches.
 
-import type { Client, ContactEvent, DueDate, Tier } from "../types";
-import { isMeaningfulContact } from "../types";
+import type { Client, ContactEvent, DueDate } from "../types";
+import { isMeaningfulContact, TIER_RANK } from "../types";
 import { addDays, nextWeekday } from "../lib/dates";
-
-const TIER_ORDER: Record<Tier, number> = { A: 0, B: 1, C: 2 };
 
 export interface OutreachItem {
   clientId: string;
@@ -44,7 +42,7 @@ export function outreachCandidates(
     .filter((c) => c.active && !contacted.has(c.id) && !hasDue.has(c.id))
     .sort(
       (a, b) =>
-        TIER_ORDER[a.tier] - TIER_ORDER[b.tier] || a.householdName.localeCompare(b.householdName),
+        TIER_RANK[a.tier] - TIER_RANK[b.tier] || a.householdName.localeCompare(b.householdName),
     );
 }
 

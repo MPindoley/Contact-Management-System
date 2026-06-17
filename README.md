@@ -75,16 +75,21 @@ Two design decisions worth knowing:
 - **Admin touches never reset the clock** and never count toward scores.
   They're recorded for the history, nothing more.
 
-### The default cadence
+### Tiers & the default cadence
 
-| Tier | Meeting | Meaningful call | ≈ touches/yr |
-| --- | --- | --- | --- |
-| A | every 90 days | every 30 days | 16 |
-| B | every 365 days | every 90 days | 5 |
-| C | every 365 days | every 180 days | 3 |
+Tiers run **S (your very top) → A → B → C**.
 
-Edit these on the **Service Models** screen — saving recomputes every due
-date and rebuilds the queue from the same last-contact dates.
+| Tier | Meeting | Meaningful call | ≈ touches/yr | Default criteria |
+| --- | --- | --- | --- | --- |
+| S | every 90 days | every 30 days | 16 | $250k+ |
+| A | every 90 days | every 30 days | 16 | $100k+ |
+| B | every 365 days | every 90 days | 5 | $25k+ |
+| C | every 365 days | every 180 days | 3 | below |
+
+Everything is editable on the **Tiers & service models** screen: the cadence
+(saving reflows every due date) *and* the criteria — each tier's revenue
+floor and description. Those floors feed the CSV importer's auto-tiering, so
+"what defines a tier" lives in one place and changes as your book grows.
 
 ### The service score
 
@@ -110,6 +115,17 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 
 ### Daily-use touches
 
+- **Money to capture** — flag a household that has held-away assets or money
+  due (checkbox + a note, or a "Money to Capture" CSV column). It shows a
+  green **$ Capture** highlight on the dashboard, queue, profile, and the
+  log-contact modal — so it's front of mind exactly when you schedule.
+- **Re-import to reconcile** — importing a CSV now *updates* existing
+  households where the data differs (tier/grade, advisor, phone) instead of
+  skipping them, and never touches their logged contact history. Matching is
+  by name (and Redtail id) across all books, so re-importing the right
+  advisor list fixes a household that landed in the wrong book — and the
+  Clients screen flags any household that appears in more than one book so
+  you can delete the stray copy.
 - **Voicemail tracking** — log a "Voicemail" when you call and don't connect.
   It's recorded as an attempt (shown in violet in the history, counted on the
   call card as "N voicemails since you last reached them") but it **never

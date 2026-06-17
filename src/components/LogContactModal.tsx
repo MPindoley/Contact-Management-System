@@ -17,7 +17,7 @@ import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { addDays, formatMedium, todayISO } from "../lib/dates";
 import { Button, Field, Input, Modal, Segmented, Select, Spinner, Textarea } from "./ui";
-import { TierBadge, AdvisorChip } from "./badges";
+import { TierBadge, AdvisorChip, HeldAwayBadge } from "./badges";
 import { CalendarIcon, ClipboardIcon, PhoneIcon, SearchIcon, VoicemailIcon } from "./icons";
 
 interface LogContactContextValue {
@@ -176,15 +176,23 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
       >
         <Field label="Household" group>
           {selected ? (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <TierBadge tier={selected.tier} />
-                <span className="truncate text-sm font-medium">{selected.householdName}</span>
-                <AdvisorChip advisor={selected.assignedAdvisor} />
+            <div className="rounded-lg border border-stone-300 bg-stone-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <TierBadge tier={selected.tier} />
+                  <span className="truncate text-sm font-medium">{selected.householdName}</span>
+                  <AdvisorChip advisor={selected.assignedAdvisor} />
+                  {selected.heldAway && <HeldAwayBadge note={selected.heldAwayNote} />}
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => { setClientId(null); setQuery(""); }}>
+                  Change
+                </Button>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => { setClientId(null); setQuery(""); }}>
-                Change
-              </Button>
+              {selected.heldAway && selected.heldAwayNote && (
+                <p className="mt-1.5 text-xs font-medium text-emerald-800">
+                  💰 {selected.heldAwayNote}
+                </p>
+              )}
             </div>
           ) : (
             <div>

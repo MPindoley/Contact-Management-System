@@ -17,6 +17,8 @@ function mkClient(o: Partial<Client> = {}): Client {
     active: true,
     phone: null,
     redtailId: null,
+    heldAway: false,
+    heldAwayNote: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     ...o,
   };
