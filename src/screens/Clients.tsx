@@ -12,6 +12,8 @@ import { formatShort } from "../lib/dates";
 import { AdvisorChip, DuePhrase, ScorePill, TierBadge } from "../components/badges";
 import { ClientFormModal } from "../components/ClientFormModal";
 import { PlanOutreachModal } from "../components/PlanOutreachModal";
+import { LinkFamiliesModal } from "../components/LinkFamiliesModal";
+import { planSurnameLinks } from "../lib/familyLink";
 import { EmptyState } from "../components/EmptyState";
 import { Button, Input, Select } from "../components/ui";
 import { PlusIcon, SearchIcon, SunriseIcon, UsersIcon } from "../components/icons";
@@ -23,11 +25,16 @@ export function Clients() {
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   const neverContacted = useMemo(
     () => (data ? outreachCandidates(data.clients, data.contactEvents, data.dueDates).length : 0),
     [data],
   );
+
+  // Same-surname households that could be grouped into families — within a
+  // book only, so different advisors' clients never merge.
+  const linkableFamilies = useMemo(() => (data ? planSurnameLinks(data.clients).length : 0), [data]);
 
   // Same household appearing in more than one book — usually a CSV that mixed
   // advisors. Surface them so the wrong-book copy can be deleted.
@@ -100,6 +107,12 @@ export function Clients() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {linkableFamilies > 0 && (
+            <Button onClick={() => setLinking(true)}>
+              <UsersIcon className="size-4" />
+              Link families
+            </Button>
+          )}
           <Button onClick={() => navigate("/clients/import")}>Import CSV</Button>
           <Button variant="primary" onClick={() => setAdding(true)}>
             <PlusIcon className="size-4" />
@@ -282,6 +295,7 @@ export function Clients() {
 
       <ClientFormModal open={adding} onClose={() => setAdding(false)} />
       {planning && <PlanOutreachModal onClose={() => setPlanning(false)} />}
+      {linking && <LinkFamiliesModal onClose={() => setLinking(false)} />}
     </div>
   );
 }

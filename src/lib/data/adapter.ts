@@ -61,7 +61,10 @@ export interface DataAdapter {
   ): Promise<DataSnapshot>;
   unlinkFromFamily(clientId: string): Promise<DataSnapshot>;
   renameFamily(familyId: string, name: string): Promise<DataSnapshot>;
-  /** Group all un-familied households that share a surname into families. */
+  /**
+   * Group un-familied households that share a surname *and* a book into
+   * families. Same surname across different advisors' books never merges.
+   */
   autoLinkBySurname(): Promise<DataSnapshot>;
 
   // --- Prospects (separate island; never touches client data) ---

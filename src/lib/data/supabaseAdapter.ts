@@ -539,23 +539,34 @@ export function createSupabaseAdapter(): DataAdapter {
     },
 
     async autoLinkBySurname() {
-      const res = await db.from("clients").select("id, household_name, family_id");
-      const rows = unwrap<Array<{ id: string; household_name: string; family_id: string | null }>>(
-        res,
-        "Loading clients",
-      );
-      const groups = new Map<string, string[]>();
+      const res = await db
+        .from("clients")
+        .select("id, household_name, family_id, assigned_advisor, active");
+      const rows = unwrap<
+        Array<{
+          id: string;
+          household_name: string;
+          family_id: string | null;
+          assigned_advisor: string;
+          active: boolean;
+        }>
+      >(res, "Loading clients");
+      // Key on advisor+surname so different books never merge, and skip
+      // already-familied or deactivated households.
+      const groups = new Map<string, { surname: string; ids: string[] }>();
       for (const r of rows) {
         if (r.family_id) continue;
+        if (r.active === false) continue;
         const sn = surnameOf(r.household_name);
         if (!sn) continue;
-        const g = groups.get(sn);
-        if (g) g.push(r.id);
-        else groups.set(sn, [r.id]);
+        const key = `${r.assigned_advisor}|${sn}`;
+        const g = groups.get(key);
+        if (g) g.ids.push(r.id);
+        else groups.set(key, { surname: sn, ids: [r.id] });
       }
-      for (const [sn, ids] of groups) {
+      for (const { surname, ids } of groups.values()) {
         if (ids.length < 2) continue;
-        const display = sn.charAt(0).toUpperCase() + sn.slice(1);
+        const display = surname.charAt(0).toUpperCase() + surname.slice(1);
         const inserted = await db.from("families").insert({ name: `${display} Family` }).select("id").single();
         const fid = unwrap<{ id: string }>(inserted, "Creating family").id;
         await db.from("clients").update({ family_id: fid, family_role: "head" }).eq("id", ids[0]);

@@ -360,8 +360,9 @@ export function ImportClients() {
               <span className="text-[13px] leading-snug text-ink">
                 <span className="font-medium">Link households that share a last name into families</span>
                 <span className="block text-xs text-stone-400">
-                  Last-name matching is fuzzy — review and fix any wrong links on the profiles
-                  afterward.
+                  Within the same book only — different advisors' clients never merge. Last-name
+                  matching is fuzzy; you can also do this anytime from the Clients screen ("Link
+                  families") and review each group before it merges.
                 </span>
               </span>
             </label>

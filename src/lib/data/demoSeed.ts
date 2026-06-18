@@ -53,6 +53,12 @@ const SPECS: SeedSpec[] = [
   { name: "Abernathy, Gordon",          tier: "C", advisor: "matt",      lastMeeting: -405, lastCall: -100, discipline: 1.6 },
   { name: "Salazar Family",             tier: "C", advisor: "advisor_b", lastMeeting: -200, lastCall: -60,  discipline: 1.0 },
   { name: "Tran, Vivian",               tier: "C", advisor: "joint",     lastMeeting: -250, lastCall: -186, discipline: 1.2 },
+  // Same-surname demo for "Link families": the two Nguyens in Matt's book can be
+  // grouped; the Nguyen in Beau's book is a different family and stays separate.
+  // (Recent contact so they sit quietly, not on today's board.)
+  { name: "Nguyen, David & Mai",        tier: "B", advisor: "matt",      lastMeeting: -40,  lastCall: -12,  discipline: 1.0 },
+  { name: "Nguyen, Grace",              tier: "C", advisor: "matt",      lastMeeting: -50,  lastCall: -20,  discipline: 1.0 },
+  { name: "Nguyen, Robert & Lin",       tier: "B", advisor: "advisor_b", lastMeeting: -45,  lastCall: -15,  discipline: 1.0 },
 ];
 
 const MEETING_NOTES = [

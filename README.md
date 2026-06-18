@@ -117,11 +117,16 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 ### Daily-use touches
 
 - **Families** — link spouses / family members (Client Profile → Family panel,
-  or opt-in auto-link by last name during import). See their **combined
-  assets** and the tier the saved criteria suggest for the combined total, with
-  one click to apply it to everyone. Each household keeps its own profile and
-  service schedule; designate roles (spouse, child, grandchild…) and unlink any
-  wrong auto-link. Stored in their own `families` table.
+  a **"Link families"** button on the Clients screen, or opt-in auto-link during
+  import). Surname linking is **book-aware**: only households that share a last
+  name *and* the same advisor pair up, so two unrelated "Nguyen"s in different
+  advisors' books never merge. The Clients-screen button previews every proposed
+  group — each with its book and members, individually checkable, filterable to
+  one book — so you confirm exactly what merges before it does. See their
+  **combined assets** and the tier the saved criteria suggest for the combined
+  total, with one click to apply it to everyone. Each household keeps its own
+  profile and service schedule; designate roles (spouse, child, grandchild…) and
+  unlink any wrong link. Stored in their own `families` table.
 - **Import follows your tier criteria** — when a revenue/AUM column is mapped,
   the importer auto-assigns S/A/B/C straight from the floors you set on the
   **Tiers & service models** screen (no separate cutoffs to re-enter), and it

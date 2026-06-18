@@ -31,6 +31,7 @@ import {
 } from "../../engine/serviceEngine";
 import { buildDemoSnapshot } from "./demoSeed";
 import { surnameOf } from "../importCsv";
+import { planSurnameLinks } from "../familyLink";
 
 const STORAGE_KEY = "relationship-hub-demo-v1";
 
@@ -431,21 +432,12 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
     async autoLinkBySurname() {
       const s = ensureLoaded();
       const now = new Date().toISOString();
-      const groups = new Map<string, typeof s.snapshot.clients>();
-      for (const c of s.snapshot.clients) {
-        if (c.familyId) continue; // never disturb an existing family
-        const sn = surnameOf(c.householdName);
-        if (!sn) continue;
-        const g = groups.get(sn);
-        if (g) g.push(c);
-        else groups.set(sn, [c]);
-      }
-      for (const [sn, members] of groups) {
-        if (members.length < 2) continue;
+      // Book-aware: only households sharing a surname AND an advisor pair up,
+      // so different advisors' same-surname clients never merge.
+      for (const group of planSurnameLinks(s.snapshot.clients)) {
         const fid = uid();
-        const display = sn.charAt(0).toUpperCase() + sn.slice(1);
-        s.snapshot.families.push({ id: fid, name: `${display} Family`, createdAt: now });
-        members.forEach((c, i) => {
+        s.snapshot.families.push({ id: fid, name: `${group.surname} Family`, createdAt: now });
+        group.clients.forEach((c, i) => {
           c.familyId = fid;
           c.familyRole = i === 0 ? "head" : "other";
         });
