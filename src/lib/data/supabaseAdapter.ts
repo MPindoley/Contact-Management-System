@@ -88,6 +88,7 @@ interface UserRow {
   email: string | null;
   role: Role;
   advisor_key: AdvisorKey | null;
+  sees_all_books: boolean | null;
   auth_user_id: string | null;
 }
 interface ClientRow {
@@ -153,6 +154,7 @@ const mapUser = (r: UserRow): User => ({
   email: r.email,
   role: r.role,
   advisorKey: r.advisor_key,
+  seesAllBooks: r.sees_all_books ?? r.role === "assistant",
 });
 const mapClient = (r: ClientRow): Client => ({
   id: r.id,
@@ -576,6 +578,15 @@ export function createSupabaseAdapter(): DataAdapter {
         })
         .eq("tier", model.tier);
       if (error) throw new Error(`Updating service model: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async bulkSetTiers(assignments: Array<{ clientId: string; tier: Tier }>) {
+      // One update per client; the tier-change trigger reflows its due dates.
+      for (const { clientId, tier } of assignments) {
+        const { error } = await db.from("clients").update({ tier }).eq("id", clientId);
+        if (error) throw new Error(`Re-tiering: ${error.message}`);
+      }
       return fetchSnapshot();
     },
 

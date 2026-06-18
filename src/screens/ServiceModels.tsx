@@ -3,10 +3,11 @@
 // tier's revenue cutoff or description and it's reflected in the CSV import
 // and everywhere the criteria are shown.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { annualRequired } from "../engine/serviceEngine";
+import { planRetier } from "../engine/retier";
 import type { ServiceModel } from "../types";
 import { TierBadge } from "../components/badges";
 import { Button, Field, Input, Spinner, Textarea } from "../components/ui";
@@ -39,6 +40,8 @@ export function ServiceModels() {
         ))}
       </div>
 
+      <RetierSection />
+
       <section className="card max-w-2xl p-5">
         <h2 className="text-sm font-semibold">The people</h2>
         <ul className="mt-3 divide-y divide-stone-100">
@@ -59,7 +62,11 @@ export function ServiceModels() {
                 )}
               </span>
               <span className="text-[13px] text-ink-soft">
-                {u.role === "advisor" ? "Advisor — sees their book + joint" : "Assistant — sees everything"}
+                {u.role === "assistant"
+                  ? "Assistant — sees everyone"
+                  : u.seesAllBooks
+                    ? "Advisor — sees all books"
+                    : "Advisor — sees only their book + joint"}
               </span>
             </li>
           ))}
@@ -174,5 +181,76 @@ function ModelCard({ model }: { model: ServiceModel }) {
         Save Tier {model.tier}
       </Button>
     </form>
+  );
+}
+
+function RetierSection() {
+  const { data, bulkSetTiers, busy } = useApp();
+  const toast = useToast();
+  const [expanded, setExpanded] = useState(false);
+
+  const changes = useMemo(
+    () => (data ? planRetier(data.clients, data.serviceModels) : []),
+    [data],
+  );
+  if (!data) return null;
+
+  const hasAum = data.clients.filter((c) => c.active && c.revenue != null).length;
+
+  async function apply() {
+    try {
+      await bulkSetTiers(changes.map((c) => ({ clientId: c.clientId, tier: c.toTier })));
+      toast.push(`${changes.length} ${changes.length === 1 ? "client" : "clients"} re-tiered — due dates reflowed.`);
+      setExpanded(false);
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Couldn't re-tier.", "error");
+    }
+  }
+
+  return (
+    <section className="card max-w-2xl p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Apply criteria to existing clients</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+            Re-grade households by their AUM on file against the floors above — no CSV needed.
+            {changes.length > 0
+              ? ` ${changes.length} of ${hasAum} would change tier.`
+              : hasAum === 0
+                ? " No households have AUM on file yet."
+                : " Everyone already matches the criteria."}
+          </p>
+        </div>
+        {changes.length > 0 && (
+          <Button variant={expanded ? "secondary" : "primary"} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Hide" : `Review ${changes.length}`}
+          </Button>
+        )}
+      </div>
+
+      {expanded && changes.length > 0 && (
+        <>
+          <ul className="mt-3 max-h-72 divide-y divide-stone-100 overflow-y-auto rounded-lg border border-stone-200">
+            {changes.slice(0, 200).map((c) => (
+              <li key={c.clientId} className="flex items-center gap-2 px-3 py-2 text-sm">
+                <span className="flex-1 truncate font-medium">{c.householdName}</span>
+                <TierBadge tier={c.fromTier} />
+                <span className="text-stone-400">→</span>
+                <TierBadge tier={c.toTier} />
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-stone-400">
+              Family members are graded on their combined assets. Households without AUM are left as set.
+            </p>
+            <Button variant="primary" disabled={busy} onClick={() => void apply()}>
+              {busy && <Spinner className="size-3.5 border-white/40 border-t-white" />}
+              Re-tier {changes.length}
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

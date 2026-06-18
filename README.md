@@ -104,8 +104,9 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 1. **Morning Dashboard** — three columns: calls due today, meetings to
    schedule, overdue (sorted by severity). Plus the next 7 days on the
    horizon. Advisors see their book + joint by default.
-2. **Action Queue** — every open item across the firm; filter by advisor,
-   tier, type; sortable. The assistant sees everything.
+2. **Action Queue** — every open item you can see (your own book + joint; a
+   senior advisor and the assistant see the whole firm); filter by advisor,
+   tier, type; sortable.
 3. **Client Profile** — 12 months of touches, current due dates, health
    score. Service history only, on purpose.
 4. **Log Contact** — the modal that drives the whole system. Press `L`
@@ -125,6 +126,13 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
   the importer auto-assigns S/A/B/C straight from the floors you set on the
   **Tiers & service models** screen (no separate cutoffs to re-enter), and it
   persists each household's AUM.
+- **Re-tier without a CSV** — change a tier's revenue floor and the **Tiers &
+  service models** screen offers to re-grade your *existing* book against the
+  new criteria: it shows exactly how many households would move and lets you
+  review every from→to before applying — no re-upload. Households are graded on
+  the AUM on file (family members on their **combined** assets), and any
+  household with no AUM is left exactly as you set it, so hand-tuned tiers are
+  never clobbered. Applying reflows due dates through the same engine.
 - **Money to capture** — flag a household that has held-away assets or money
   due (checkbox + a note, or a "Money to Capture" CSV column). It shows a
   green **$ Capture** highlight on the dashboard, queue, profile, and the
@@ -151,9 +159,20 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
   CSV column). It shows as a tap-to-call link on call cards, the queue, and
   the profile — so when a call comes due, the number's right there and dials
   straight from your phone. Meetings don't show it; it's there for calling.
+- **Per-advisor privacy** — each advisor's book is private. A **senior advisor**
+  (the `sees_all_books` flag) and the **assistant** see every client; every
+  other advisor sees only their own households **plus joint** ones — never a
+  colleague's. **Prospects are stricter still:** each advisor sees *only* their
+  own pipeline (the assistant sees all) — even a senior advisor doesn't see
+  another advisor's prospects. It's enforced two ways: the app filters what it
+  shows, *and* Postgres **row-level security** makes the hidden rows unreadable
+  and unwritable over the API, so a restricted advisor can't reach another's
+  book even outside the UI. (In the demo: Matt sees every client but only his
+  own prospects, Beau sees only his book + joint, Carolyn the assistant sees
+  everyone.)
 - **Your book by default** — the Clients list opens filtered to the signed-in
-  advisor (the assistant sees everyone); switch to Joint, Beau, or All when
-  you want. Sort the list by household, tier, or service score.
+  advisor; switch to Joint, a colleague, or All (within what you're allowed to
+  see) when you want. Sort the list by household, tier, or service score.
 - **Plan initial outreach** — a never-contacted household has no history, so
   the engine gives it no due date and it stays invisible. The Clients screen
   flags how many there are and offers a one-time **Plan initial outreach**:

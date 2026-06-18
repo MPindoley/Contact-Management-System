@@ -23,6 +23,7 @@ import type {
   LogProspectInput,
   Prospect,
   ServiceModel,
+  Tier,
   TouchType,
   UpdateClientInput,
   UpdateContactInput,
@@ -33,6 +34,7 @@ import type { DataAdapter } from "./data/adapter";
 import { createDemoAdapter } from "./data/demoAdapter";
 import { createSupabaseAdapter, getSupabase, isSupabaseConfigured } from "./data/supabaseAdapter";
 import { DEMO_USERS } from "./data/demoSeed";
+import { scopeSnapshot } from "./visibility";
 import { todayISO } from "./dates";
 
 const DEMO_USER_KEY = "relationship-hub-demo-user";
@@ -78,6 +80,7 @@ interface AppContextValue {
   renameFamily(familyId: string, name: string): Promise<void>;
   autoLinkBySurname(): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
+  bulkSetTiers(assignments: Array<{ clientId: string; tier: Tier }>): Promise<void>;
   addProspect(input: AddProspectInput): Promise<Prospect | null>;
   updateProspect(prospectId: string, patch: UpdateProspectInput): Promise<void>;
   deleteProspect(prospectId: string): Promise<void>;
@@ -108,11 +111,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return DEMO_USERS.find((u) => u.id === saved) ?? null;
   });
 
-  const [data, setData] = useState<DataSnapshot | null>(null);
+  const [rawData, setData] = useState<DataSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [today, setToday] = useState(todayISO());
+
+  // Narrow everything to what the signed-in user is allowed to see. The
+  // database enforces the same rule (RLS) for Supabase; this keeps the UI
+  // honest and does the work in demo mode.
+  const data = useMemo<DataSnapshot | null>(
+    () => (rawData && currentUser ? scopeSnapshot(rawData, currentUser) : rawData),
+    [rawData, currentUser],
+  );
 
   // ---- Supabase session → firm profile -----------------------------------
   useEffect(() => {
@@ -125,7 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAuthReady(true);
         return;
       }
-      const columns = "id, name, email, role, advisor_key";
+      const columns = "id, name, email, role, advisor_key, sees_all_books";
 
       // Two simple lookups instead of one fragile or() filter: first by the
       // stamped auth id, then case-insensitively by email.
@@ -146,7 +157,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       setCurrentUser(
         row
-          ? { id: row.id, name: row.name, email: row.email, role: row.role, advisorKey: row.advisor_key }
+          ? {
+              id: row.id,
+              name: row.name,
+              email: row.email,
+              role: row.role,
+              advisorKey: row.advisor_key,
+              // Older databases without the column → assistants see all,
+              // advisors default to their own book.
+              seesAllBooks: row.sees_all_books ?? row.role === "assistant",
+            }
           : null,
       );
       if (!row) {
@@ -290,13 +310,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addClient = useCallback(
     (input: AddClientInput) => {
-      const before = new Set((data?.clients ?? []).map((c) => c.id));
+      const before = new Set((rawData?.clients ?? []).map((c) => c.id));
       return run(
         () => adapter.addClient(input),
         (s) => s.clients.find((c) => !before.has(c.id)) ?? null,
       );
     },
-    [adapter, run, data],
+    [adapter, run, rawData],
   );
 
   const importClients = useCallback(
@@ -366,15 +386,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  const bulkSetTiers = useCallback(
+    (assignments: Array<{ clientId: string; tier: Tier }>) =>
+      run(() => adapter.bulkSetTiers(assignments)),
+    [adapter, run],
+  );
+
   const addProspect = useCallback(
     (input: AddProspectInput) => {
-      const before = new Set((data?.prospects ?? []).map((p) => p.id));
+      const before = new Set((rawData?.prospects ?? []).map((p) => p.id));
       return run(
         () => adapter.addProspect(input),
         (s) => s.prospects.find((p) => !before.has(p.id)) ?? null,
       );
     },
-    [adapter, run, data],
+    [adapter, run, rawData],
   );
 
   const updateProspect = useCallback(
@@ -433,6 +459,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       renameFamily,
       autoLinkBySurname,
       updateServiceModel,
+      bulkSetTiers,
       addProspect,
       updateProspect,
       deleteProspect,

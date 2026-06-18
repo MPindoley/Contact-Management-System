@@ -9,9 +9,9 @@ import { Button, Field, Input, Spinner } from "../components/ui";
 import { LogoMark } from "../components/icons";
 
 const PERSONA_SCOPES: Record<string, string> = {
-  user_matt: "Sees his book plus joint households",
-  user_advisor_b: "Sees their book plus joint households",
-  user_assistant: "Sees every client across the firm",
+  user_matt: "Senior advisor — sees every book, own prospects only",
+  user_advisor_b: "Sees their own book + joint, own prospects only",
+  user_assistant: "Sees everyone — every client and prospect",
 };
 
 export function SignIn() {

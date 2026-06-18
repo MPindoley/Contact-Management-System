@@ -6,6 +6,7 @@ import type {
   LogContactInput,
   LogProspectInput,
   ServiceModel,
+  Tier,
   TouchType,
   UpdateClientInput,
   UpdateContactInput,
@@ -47,6 +48,8 @@ export interface DataAdapter {
   /** Permanently delete a household and all its contact history. */
   deleteClient(clientId: string): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
+  /** Apply tier assignments in bulk (used by re-tier from criteria). */
+  bulkSetTiers(assignments: Array<{ clientId: string; tier: Tier }>): Promise<DataSnapshot>;
 
   // --- Family linking ---
   /** Link households into a family (new family if familyId is null). */

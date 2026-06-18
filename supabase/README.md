@@ -17,14 +17,34 @@ Open **SQL Editor** in the Supabase dashboard, paste the contents of
 This creates the six tables, the service-engine triggers, the tier rules
 (A: 90/30, B: 365/90, C: 365/180), and the three user profiles.
 
-### Already set up? Run the upgrade instead
+### Already set up? Run the upgrades instead
 
 If your database already has the original schema (and data), **don't** re-run
-`0001_init.sql` — it uses `create table` and would error. Instead paste and run
-[`migrations/0002_upgrade.sql`](migrations/0002_upgrade.sql). It's fully
-idempotent (safe to run any number of times) and brings an existing install up
-to date with every feature added after first setup: snooze, initial outreach,
-and client phone numbers. Re-run it whenever you get an updated build.
+`0001_init.sql` — it uses `create table` and would error. Instead apply the
+incremental upgrade files **in order**, in the SQL editor. Each is idempotent
+(safe to re-run), so when you get a newer build just run the ones you haven't
+yet:
+
+| File | Adds |
+| --- | --- |
+| [`0002_upgrade.sql`](migrations/0002_upgrade.sql) | snooze, initial outreach, client phone numbers |
+| [`0003_tiers_held_away.sql`](migrations/0003_tiers_held_away.sql) | the **S** tier, editable tier criteria, held-away "money to capture" flag — **two steps** (run STEP 1, then STEP 2; Postgres won't use a new enum value in the batch that adds it) |
+| [`0004_revenue_families.sql`](migrations/0004_revenue_families.sql) | persisted AUM/revenue + family linking (single step) |
+| [`0005_per_advisor_privacy.sql`](migrations/0005_per_advisor_privacy.sql) | **per-advisor privacy** — row-level security so each advisor's clients and prospects are private (single step) |
+
+After **0005**, confirm who sees everything. The senior advisor and the
+assistant should have `sees_all_books = true`; everyone else `false`. The
+migration sets that for the assistant and for `advisor_key = 'matt'` — adjust
+if your senior advisor is keyed differently:
+
+```sql
+update users set sees_all_books = true  where advisor_key = 'matt';       -- senior advisor
+update users set sees_all_books = true  where role = 'assistant';         -- always sees all
+update users set sees_all_books = false where advisor_key = 'advisor_b';  -- restricted advisor
+```
+
+(Prospects ignore this flag — they're private to each advisor regardless, and
+only the assistant sees them all.)
 
 ## 3. Wire up the people
 

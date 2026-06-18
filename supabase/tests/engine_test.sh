@@ -15,6 +15,7 @@ run() { sudo -u postgres psql -v ON_ERROR_STOP=1 -qd "$DB" "$@"; }
 run <<'SQL'
 create schema auth;
 create table auth.users (id uuid primary key, email text);
+create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
 do $$ begin if not exists (select from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if; end $$;
 SQL
 

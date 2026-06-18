@@ -14,6 +14,7 @@ import type {
   LogProspectInput,
   Prospect,
   ServiceModel,
+  Tier,
   TouchType,
   UpdateClientInput,
   UpdateContactInput,
@@ -460,6 +461,19 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       );
       // The rules changed — the whole book reflows.
       for (const client of s.snapshot.clients) recomputeClient(client.id);
+      rebuild(todayISO());
+      return snapshot();
+    },
+
+    async bulkSetTiers(assignments: Array<{ clientId: string; tier: Tier }>) {
+      const s = ensureLoaded();
+      for (const { clientId, tier } of assignments) {
+        const c = s.snapshot.clients.find((x) => x.id === clientId);
+        if (c && c.tier !== tier) {
+          c.tier = tier;
+          recomputeClient(clientId);
+        }
+      }
       rebuild(todayISO());
       return snapshot();
     },

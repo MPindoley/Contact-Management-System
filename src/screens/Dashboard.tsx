@@ -45,7 +45,8 @@ export function Dashboard() {
     return {
       byId,
       outreach: outreachKeys(data.dueDates),
-      isAdvisor: scope !== "all",
+      // Only the senior advisor (who can see other books) gets a firm toggle.
+      isAdvisor: scope !== "all" && currentUser.seesAllBooks,
       callsToday: sortByTierThenName(buckets.callsToday, byId),
       meetingsToday: sortByTierThenName(buckets.meetingsToday, byId),
       overdue: buckets.overdue,

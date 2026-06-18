@@ -37,6 +37,8 @@ create table users (
   email         text unique,
   role          user_role not null,
   advisor_key   advisor_assignment check (advisor_key <> 'joint'),
+  -- Can this person see every advisor's book? (senior advisor + assistant)
+  sees_all_books boolean not null default false,
   created_at    timestamptz not null default now(),
   constraint advisor_needs_key check (role <> 'advisor' or advisor_key is not null)
 );
@@ -439,14 +441,36 @@ create trigger users_email_link
   for each row execute function handle_users_email_set();
 
 -- ============================================================================
--- Row level security
+-- Row level security — per-advisor privacy
 -- ----------------------------------------------------------------------------
--- Phase 1 posture: this is an internal tool for three trusted people, and the
--- Firm Report needs every signed-in user to read firm-wide data. So: any
--- authenticated user can read and write; anonymous users get nothing.
--- Per-advisor scoping is a view default in the app, not a security boundary.
--- Tighten these policies if the firm ever grows past the founding team.
+-- Who sees what:
+--   • clients (and their contacts / due dates / tasks): visible to a user who
+--     sees all books (senior advisor + assistant), or who owns the client, or
+--     if the client is 'joint'.
+--   • prospects: stricter — each advisor sees ONLY their own (+ joint); only
+--     the assistant sees everyone's.
+--   • users, service_models, families: readable by everyone (labels/config;
+--     the sensitive client data they reference is itself scoped above).
+-- Engine triggers run security-definer (as the table owner) and bypass RLS,
+-- so due dates and tasks are still maintained for every client.
 -- ============================================================================
+
+-- Who is the requester? (security definer so the policies can read users.)
+create or replace function app_sees_all() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(
+    (select sees_all_books or role = 'assistant' from users where auth_user_id = auth.uid() limit 1),
+    false)
+$$;
+create or replace function app_is_assistant() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select role = 'assistant' from users where auth_user_id = auth.uid() limit 1), false)
+$$;
+create or replace function app_advisor_key() returns advisor_assignment
+language sql stable security definer set search_path = public as $$
+  select advisor_key from users where auth_user_id = auth.uid() limit 1
+$$;
+
 alter table users          enable row level security;
 alter table clients        enable row level security;
 alter table service_models enable row level security;
@@ -457,19 +481,43 @@ alter table prospects        enable row level security;
 alter table prospect_events  enable row level security;
 alter table families         enable row level security;
 
+-- Config & labels: readable by all signed-in users.
 create policy "authenticated read users"   on users          for select to authenticated using (true);
 create policy "authenticated update users" on users          for update to authenticated using (true) with check (true);
-create policy "authenticated all clients"  on clients        for all    to authenticated using (true) with check (true);
 create policy "authenticated all models"   on service_models for all    to authenticated using (true) with check (true);
-create policy "authenticated all events"   on contact_events for all    to authenticated using (true) with check (true);
-create policy "authenticated read due"     on due_dates      for select to authenticated using (true);
-create policy "authenticated read tasks"   on tasks          for select to authenticated using (true);
-create policy "authenticated all prospects"       on prospects       for all to authenticated using (true) with check (true);
-create policy "authenticated all prospect events" on prospect_events for all to authenticated using (true) with check (true);
-create policy "authenticated all families"        on families        for all to authenticated using (true) with check (true);
+create policy "authenticated all families" on families       for all    to authenticated using (true) with check (true);
 
--- Base table privileges (RLS above still decides which rows are visible).
+-- Clients: scoped to the requester's books.
+create policy "scoped clients" on clients for all to authenticated
+  using (app_sees_all() or assigned_advisor = app_advisor_key() or assigned_advisor = 'joint')
+  with check (app_sees_all() or assigned_advisor = app_advisor_key() or assigned_advisor = 'joint');
+
+-- Contact events / due dates / tasks: scoped by their parent client.
+create policy "scoped events" on contact_events for all to authenticated
+  using (exists (select 1 from clients c where c.id = client_id
+                 and (app_sees_all() or c.assigned_advisor = app_advisor_key() or c.assigned_advisor = 'joint')))
+  with check (exists (select 1 from clients c where c.id = client_id
+                 and (app_sees_all() or c.assigned_advisor = app_advisor_key() or c.assigned_advisor = 'joint')));
+create policy "scoped due" on due_dates for select to authenticated
+  using (exists (select 1 from clients c where c.id = client_id
+                 and (app_sees_all() or c.assigned_advisor = app_advisor_key() or c.assigned_advisor = 'joint')));
+create policy "scoped tasks" on tasks for select to authenticated
+  using (exists (select 1 from clients c where c.id = client_id
+                 and (app_sees_all() or c.assigned_advisor = app_advisor_key() or c.assigned_advisor = 'joint')));
+
+-- Prospects: each advisor sees only their own (+ joint); assistant sees all.
+create policy "scoped prospects" on prospects for all to authenticated
+  using (app_is_assistant() or assigned_advisor = app_advisor_key() or assigned_advisor = 'joint')
+  with check (app_is_assistant() or assigned_advisor = app_advisor_key() or assigned_advisor = 'joint');
+create policy "scoped prospect events" on prospect_events for all to authenticated
+  using (exists (select 1 from prospects p where p.id = prospect_id
+                 and (app_is_assistant() or p.assigned_advisor = app_advisor_key() or p.assigned_advisor = 'joint')))
+  with check (exists (select 1 from prospects p where p.id = prospect_id
+                 and (app_is_assistant() or p.assigned_advisor = app_advisor_key() or p.assigned_advisor = 'joint')));
+
+-- Base table privileges (the policies above still decide which rows are visible).
 grant select, insert, update, delete on all tables in schema public to authenticated;
+grant execute on function app_sees_all(), app_is_assistant(), app_advisor_key() to authenticated;
 
 -- ============================================================================
 -- Realtime — broadcast row changes so every signed-in teammate's screen
@@ -496,10 +544,10 @@ insert into service_models (tier, meeting_interval_days, call_interval_days, min
 
 -- Set real emails before inviting people, so signups auto-link to profiles:
 --   update users set email = 'matt@yourfirm.com' where advisor_key = 'matt';
-insert into users (name, email, role, advisor_key) values
-  ('Matt',      null, 'advisor',   'matt'),
-  ('Beau',      null, 'advisor',   'advisor_b'),
-  ('Assistant', null, 'assistant', null);
+insert into users (name, email, role, advisor_key, sees_all_books) values
+  ('Matt',    null, 'advisor',   'matt',      true),   -- senior advisor: sees every book
+  ('Beau',    null, 'advisor',   'advisor_b', false),  -- sees only his own + joint
+  ('Carolyn', null, 'assistant', null,        true);   -- assistant: sees everyone
 
 -- ============================================================================
 -- Nightly rebuild at 6:00 — pick ONE of the two options:

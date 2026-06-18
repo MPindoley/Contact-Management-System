@@ -8,9 +8,10 @@ import { addDays } from "../dates";
 import { computeClientDueDates, rebuildAllTasks } from "../../engine/serviceEngine";
 
 export const DEMO_USERS: User[] = [
-  { id: "user_matt", name: "Matt", email: "matt@demo.firm", role: "advisor", advisorKey: "matt" },
-  { id: "user_advisor_b", name: "Beau", email: "beau@demo.firm", role: "advisor", advisorKey: "advisor_b" },
-  { id: "user_assistant", name: "Assistant", email: "assistant@demo.firm", role: "assistant", advisorKey: null },
+  // Matt is the senior advisor — sees every book. Beau sees only his own.
+  { id: "user_matt", name: "Matt", email: "matt@demo.firm", role: "advisor", advisorKey: "matt", seesAllBooks: true },
+  { id: "user_advisor_b", name: "Beau", email: "beau@demo.firm", role: "advisor", advisorKey: "advisor_b", seesAllBooks: false },
+  { id: "user_assistant", name: "Carolyn", email: "carolyn@demo.firm", role: "assistant", advisorKey: null, seesAllBooks: true },
 ];
 
 export const DEFAULT_SERVICE_MODELS: ServiceModel[] = [

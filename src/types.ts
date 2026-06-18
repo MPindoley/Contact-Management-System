@@ -18,6 +18,8 @@ export interface User {
   email: string | null;
   role: Role;
   advisorKey: AdvisorKey | null; // null for the assistant
+  /** Can see every advisor's clients (e.g. the senior advisor + assistant). */
+  seesAllBooks: boolean;
 }
 
 export interface Client {
