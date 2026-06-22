@@ -1,7 +1,7 @@
 // Sign in. Demo mode: pick a persona and go. Supabase mode: email + password.
 
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { DEMO_USERS } from "../lib/data/demoSeed";
 import { supabaseConfigWarning } from "../lib/data/supabaseAdapter";
@@ -89,6 +89,7 @@ function DemoSignIn() {
 
 function SupabaseSignIn() {
   const { signInSupabase, signUpSupabase, error: appError } = useApp();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [creating, setCreating] = useState(false);
@@ -112,19 +113,10 @@ function SupabaseSignIn() {
     }
   }
 
-  async function forgotPassword() {
-    setError(null);
-    setNotice(null);
-    if (!email.trim()) {
-      setError("Type your email above first, then click “Forgot password” again.");
-      return;
-    }
-    const { getSupabase } = await import("../lib/data/supabaseAdapter");
-    const { error: err } = await getSupabase().auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (err) setError(err.message);
-    else setNotice("Recovery email sent — open the link in it to choose a new password.");
+  function forgotPassword() {
+    // The reset page owns the whole recovery flow (email → 6-digit code → new
+    // password). Carry along whatever they've already typed.
+    navigate("/reset-password", { state: { email: email.trim() || undefined } });
   }
 
   return (

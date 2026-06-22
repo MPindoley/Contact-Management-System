@@ -1,13 +1,13 @@
-// Set a new password. The recovery email links here; Supabase signs the
-// visitor in from the link's token, and updateUser({ password }) finishes the
-// job. Also reachable while signed in, so it doubles as "change my password".
-//
-// If someone lands here without a valid recovery session — an expired or
-// already-used link, or just a stray visit — we don't dead-end them: we explain
-// what happened and let them request a fresh link without leaving the page.
+// Password reset that survives corporate email link-scanners. The recovery
+// email carries a 6-digit code (and, as a fallback, a link); the visitor enters
+// their email, gets a code, types it, and sets a new password. A scanner can
+// "click" a one-time link and burn it before the user does — it can't spend a
+// code sitting in the email body, so codes are the reliable path for Outlook /
+// Microsoft 365 and the like. Also reachable while signed in, so the
+// set-password form doubles as "change my password".
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { getSupabase } from "../lib/data/supabaseAdapter";
 import { Button, Field, Input, Spinner } from "../components/ui";
@@ -15,29 +15,22 @@ import { LogoMark } from "../components/icons";
 
 // Snapshot any auth error in the URL the moment this module loads. supabase-js
 // strips the recovery hash right after it processes it, so reading it later is
-// too late — this lets us tell "expired/used link" from "landed here by chance".
+// too late — this lets us greet an expired/used link with the code form instead
+// of a dead end.
 const linkError = readLinkError();
 
-function readLinkError(): { code: string; description: string | null } | null {
-  if (typeof window === "undefined") return null;
+function readLinkError(): boolean {
+  if (typeof window === "undefined") return false;
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const query = new URLSearchParams(window.location.search);
-  const code =
-    hash.get("error_code") || query.get("error_code") || hash.get("error") || query.get("error");
-  if (!code) return null;
-  const raw = hash.get("error_description") || query.get("error_description");
-  return { code, description: raw ? decodeURIComponent(raw.replace(/\+/g, " ")) : null };
+  return Boolean(
+    hash.get("error_code") || query.get("error_code") || hash.get("error") || query.get("error"),
+  );
 }
 
 export function ResetPassword() {
   const { mode } = useApp();
-  const navigate = useNavigate();
   const [hasSession, setHasSession] = useState<boolean | null>(null);
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
 
   useEffect(() => {
     if (mode !== "supabase") return;
@@ -48,6 +41,51 @@ export function ResetPassword() {
     });
     return () => sub.subscription.unsubscribe();
   }, [mode]);
+
+  const ready = mode === "supabase" && hasSession === true;
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-10">
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <LogoMark className="mx-auto size-12 text-pine-700" />
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight">
+            {ready ? "Choose a new password" : "Reset your password"}
+          </h1>
+        </div>
+
+        {mode === "demo" ? (
+          <Notice>
+            Demo mode has no passwords — you sign in by picking a persona.{" "}
+            <Link to="/signin" className="font-medium underline underline-offset-2">
+              Back to sign in
+            </Link>
+          </Notice>
+        ) : ready ? (
+          <SetPasswordForm />
+        ) : hasSession === null && !linkError ? (
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
+        ) : (
+          // No valid session — an expired/used link, or a fresh visit. Recover
+          // with a code; verifying it establishes the session, which flips this
+          // view to the set-password form above.
+          <CodeRecovery expired={linkError} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Shown once a recovery session exists (from a code, or a link that survived).
+function SetPasswordForm() {
+  const navigate = useNavigate();
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
   async function submit() {
     setError(null);
@@ -62,122 +100,96 @@ export function ResetPassword() {
     setPending(true);
     const { error: err } = await getSupabase().auth.updateUser({ password });
     setPending(false);
-    if (err) {
-      setError(err.message);
-    } else {
+    if (err) setError(err.message);
+    else {
       setDone(true);
       window.setTimeout(() => navigate("/", { replace: true }), 1200);
     }
   }
 
-  // A valid recovery link means no error AND a session — only then show the form.
-  const showForm = mode === "supabase" && !linkError && hasSession === true;
-  const stillChecking = mode === "supabase" && !linkError && hasSession === null;
+  if (done) return <Notice tone="success">Password updated. Taking you to your dashboard…</Notice>;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <LogoMark className="mx-auto size-12 text-pine-700" />
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-            {showForm ? "Choose a new password" : "Reset your password"}
-          </h1>
-        </div>
-
-        {mode === "demo" ? (
-          <Notice>
-            Demo mode has no passwords — you sign in by picking a persona.{" "}
-            <Link to="/signin" className="font-medium underline underline-offset-2">
-              Back to sign in
-            </Link>
-          </Notice>
-        ) : stillChecking ? (
-          <div className="flex justify-center py-8">
-            <Spinner />
-          </div>
-        ) : showForm ? (
-          done ? (
-            <Notice tone="success">Password updated. Taking you to your dashboard…</Notice>
-          ) : (
-            <form
-              className="card animate-rise space-y-4 p-6"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void submit();
-              }}
-            >
-              <Field label="New password">
-                <Input
-                  type="password"
-                  required
-                  autoFocus
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                />
-              </Field>
-              <Field label="New password, again">
-                <Input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="••••••••"
-                />
-              </Field>
-
-              {error && <p className="rounded-lg bg-clay-50 px-3 py-2 text-sm text-clay-800">{error}</p>}
-
-              <Button variant="primary" type="submit" disabled={pending} className="w-full">
-                {pending && <Spinner className="size-3.5 border-white/40 border-t-white" />}
-                Save new password
-              </Button>
-            </form>
-          )
-        ) : (
-          <RequestNewLink expired={Boolean(linkError)} />
-        )}
-      </div>
-    </div>
+    <form
+      className="card animate-rise space-y-4 p-6"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <Field label="New password">
+        <Input
+          type="password"
+          required
+          autoFocus
+          minLength={6}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+        />
+      </Field>
+      <Field label="New password, again">
+        <Input
+          type="password"
+          required
+          minLength={6}
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="••••••••"
+        />
+      </Field>
+      {error && <p className="rounded-lg bg-clay-50 px-3 py-2 text-sm text-clay-800">{error}</p>}
+      <Button variant="primary" type="submit" disabled={pending} className="w-full">
+        {pending && <Spinner className="size-3.5 border-white/40 border-t-white" />}
+        Save new password
+      </Button>
+    </form>
   );
 }
 
-// Shown when there's no valid recovery session: an expired/used link, or a
-// visit without a link at all. Lets the person send themselves a fresh link
-// without bouncing back to the sign-in screen.
-function RequestNewLink({ expired }: { expired: boolean }) {
-  const [email, setEmail] = useState("");
-  const [pending, setPending] = useState(false);
-  const [sent, setSent] = useState(false);
+// Email → 6-digit code → verify. Verifying signs the visitor in, after which
+// the parent shows the set-password form.
+function CodeRecovery({ expired }: { expired: boolean }) {
+  const location = useLocation();
+  const presetEmail = (location.state as { email?: string } | null)?.email ?? "";
+  const [email, setEmail] = useState(presetEmail);
+  const [code, setCode] = useState("");
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function send() {
+  async function sendCode() {
     setError(null);
     if (!email.trim()) {
       setError("Enter your email first.");
       return;
     }
-    setPending(true);
+    setSending(true);
     const { error: err } = await getSupabase().auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/reset-password`,
     });
-    setPending(false);
+    setSending(false);
     if (err) setError(err.message);
-    else setSent(true);
+    else setSentTo(email.trim());
   }
 
-  if (sent) {
-    return (
-      <Notice tone="success">
-        Sent. Open the <strong>newest</strong> email and click its link — reset links work once, so
-        always use the latest one, and open it on this device.{" "}
-        <Link to="/signin" className="font-medium underline underline-offset-2">
-          Back to sign in
-        </Link>
-      </Notice>
-    );
+  async function verify() {
+    setError(null);
+    const token = code.replace(/\D/g, "");
+    if (token.length < 6) {
+      setError("Enter the 6-digit code from the email.");
+      return;
+    }
+    setVerifying(true);
+    const { error: err } = await getSupabase().auth.verifyOtp({
+      email: email.trim(),
+      token,
+      type: "recovery",
+    });
+    setVerifying(false);
+    // On success the auth listener flips the parent to the set-password form.
+    if (err) setError("That code is wrong or has expired. Send a fresh one and try again.");
   }
 
   return (
@@ -185,31 +197,54 @@ function RequestNewLink({ expired }: { expired: boolean }) {
       className="card animate-rise space-y-4 p-6"
       onSubmit={(e) => {
         e.preventDefault();
-        void send();
+        void verify();
       }}
     >
       <p className="text-sm leading-relaxed text-ink-soft">
         {expired
-          ? "This link has expired or was already used — reset links work once and expire after about an hour. Enter your email and we'll send a fresh one."
-          : "Enter your email and we'll send you a link to set a new password."}
+          ? "That link had already been used — work email often opens reset links automatically, which spends them. Use a code instead:"
+          : "We'll email you a 6-digit code to set a new password."}
       </p>
 
       <Field label="Email">
         <Input
           type="email"
           required
-          autoFocus
+          autoFocus={!presetEmail}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@yourfirm.com"
         />
       </Field>
 
+      <Button type="button" variant="secondary" onClick={() => void sendCode()} disabled={sending} className="w-full">
+        {sending && <Spinner className="size-3.5" />}
+        {sentTo ? "Resend code" : "Email me a code"}
+      </Button>
+
+      {sentTo && (
+        <p className="rounded-lg bg-pine-50 px-3 py-2 text-sm text-pine-800">
+          Code sent to {sentTo}. Enter it below (check spam if it's slow).
+        </p>
+      )}
+
+      <Field label="6-digit code">
+        <Input
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="123456"
+          className="tnum tracking-[0.3em]"
+        />
+      </Field>
+
       {error && <p className="rounded-lg bg-clay-50 px-3 py-2 text-sm text-clay-800">{error}</p>}
 
-      <Button variant="primary" type="submit" disabled={pending} className="w-full">
-        {pending && <Spinner className="size-3.5 border-white/40 border-t-white" />}
-        Email me a reset link
+      <Button variant="primary" type="submit" disabled={verifying || code.replace(/\D/g, "").length < 6} className="w-full">
+        {verifying && <Spinner className="size-3.5 border-white/40 border-t-white" />}
+        Verify code
       </Button>
       <p className="text-center text-xs text-stone-400">
         <Link to="/signin" className="underline underline-offset-2 hover:text-ink">
