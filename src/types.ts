@@ -7,6 +7,13 @@ export type FamilyRole = "head" | "spouse" | "partner" | "child" | "grandchild" 
 export type AdvisorAssignment = "matt" | "advisor_b" | "joint";
 export type AdvisorKey = Exclude<AdvisorAssignment, "joint">;
 export type Role = "advisor" | "assistant";
+/**
+ * Who made/logged a touch — the two advisors plus the assistant. Kept separate
+ * from AdvisorKey (advisors only) and AdvisorAssignment (client ownership) so
+ * "assistant" can author a contact without ever becoming a client-assignment
+ * option.
+ */
+export type TouchAuthor = AdvisorKey | "assistant";
 export type ContactType = "meeting" | "call" | "voicemail" | "admin";
 export type TouchType = "meeting" | "call";
 export type Priority = "high" | "medium" | "low";
@@ -59,7 +66,7 @@ export interface ServiceModel {
 export interface ContactEvent {
   id: string;
   clientId: string;
-  advisor: AdvisorKey;
+  advisor: TouchAuthor;
   type: ContactType;
   eventDate: string;
   durationMinutes: number | null;
@@ -112,7 +119,7 @@ export interface Prospect {
 export interface ProspectEvent {
   id: string;
   prospectId: string;
-  advisor: AdvisorKey;
+  advisor: TouchAuthor;
   type: ProspectEventType;
   eventDate: string;
   notes: string | null;
@@ -151,7 +158,7 @@ export interface UpdateProspectInput {
 
 export interface LogProspectInput {
   prospectId: string;
-  advisor: AdvisorKey;
+  advisor: TouchAuthor;
   type: ProspectEventType;
   eventDate: string;
   notes: string | null;
@@ -185,7 +192,7 @@ export const PROSPECT_STATUSES: ProspectStatus[] = [
 
 export interface LogContactInput {
   clientId: string;
-  advisor: AdvisorKey;
+  advisor: TouchAuthor;
   type: ContactType;
   eventDate: string;
   durationMinutes: number | null;
@@ -193,7 +200,7 @@ export interface LogContactInput {
 }
 
 export interface UpdateContactInput {
-  advisor?: AdvisorKey;
+  advisor?: TouchAuthor;
   type?: ContactType;
   eventDate?: string;
   durationMinutes?: number | null;
@@ -280,6 +287,21 @@ export const TIERS: Tier[] = ["S", "A", "B", "C"];
 /** Sort rank, best first. Use everywhere tiers are ordered. */
 export const TIER_RANK: Record<Tier, number> = { S: 0, A: 1, B: 2, C: 3 };
 export const ADVISOR_KEYS: AdvisorKey[] = ["matt", "advisor_b"];
+
+// Who can be recorded as making a touch — both advisors and the assistant.
+export const TOUCH_AUTHORS: TouchAuthor[] = ["matt", "advisor_b", "assistant"];
+export const TOUCH_AUTHOR_LABELS: Record<TouchAuthor, string> = {
+  matt: "Matt",
+  advisor_b: "Beau",
+  assistant: "Carolyn",
+};
+
+/** The touch author to default to for a user (the assistant logs as herself). */
+export function authorForUser(user: User | null): TouchAuthor {
+  if (!user) return "matt";
+  if (user.role === "assistant") return "assistant";
+  return user.advisorKey ?? "matt";
+}
 
 /** The advisor assignments a user is responsible for (their default scope). */
 export function scopeFor(user: User): AdvisorAssignment[] | "all" {

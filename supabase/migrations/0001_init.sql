@@ -14,7 +14,9 @@ create extension if not exists pgcrypto;
 -- ---------------------------------------------------------------------------
 -- Enums
 -- ---------------------------------------------------------------------------
-create type advisor_assignment as enum ('matt', 'advisor_b', 'joint');
+-- 'assistant' is only ever a touch *author* (who logged a contact), never a
+-- client assignment; the app keeps it out of assignment pickers.
+create type advisor_assignment as enum ('matt', 'advisor_b', 'joint', 'assistant');
 create type user_role         as enum ('advisor', 'assistant');
 create type client_tier       as enum ('S', 'A', 'B', 'C');
 create type contact_type      as enum ('meeting', 'call', 'voicemail', 'admin');

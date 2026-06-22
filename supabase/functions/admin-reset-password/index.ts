@@ -6,10 +6,9 @@
 // browser; the function verifies the CALLER is a real firm admin before doing
 // anything, and only ever touches accounts that belong to the firm's `users`.
 //
-// Who may reset: any signed-in user whose `users` row has sees_all_books = true
-// (the senior advisor and the assistant in the default setup). To limit it to
-// just the senior advisor, tighten the check below to also require
-// role = 'advisor'.
+// Who may reset: the senior advisor — a user whose `users` row has
+// sees_all_books = true AND role = 'advisor' (Matt in the default setup). To
+// also allow the assistant, drop the role check below.
 //
 // Deploy:  supabase functions deploy admin-reset-password
 //   (uses the built-in SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY
@@ -47,14 +46,14 @@ Deno.serve(async (req) => {
 
   const admin = createClient(url, serviceKey);
 
-  // The caller must be a firm admin (sees every book).
+  // The caller must be the senior advisor (an advisor who sees every book).
   const { data: callerRow } = await admin
     .from("users")
-    .select("id, name, sees_all_books")
+    .select("id, name, role, sees_all_books")
     .eq("auth_user_id", caller.id)
     .maybeSingle();
-  if (!callerRow?.sees_all_books) {
-    return json(403, { error: "Only an admin can reset passwords." });
+  if (!callerRow?.sees_all_books || callerRow.role !== "advisor") {
+    return json(403, { error: "Only the senior advisor can reset passwords." });
   }
 
   const body = await req.json().catch(() => ({}));

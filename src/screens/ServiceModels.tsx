@@ -25,9 +25,11 @@ export function ServiceModels() {
   const [resetting, setResetting] = useState<User | null>(null);
   if (!data) return null;
 
-  // Admins (sees every book) can reset a locked-out teammate's password — only
-  // on the live backend, where the secure server function exists.
-  const canResetPasswords = mode === "supabase" && Boolean(currentUser?.seesAllBooks);
+  // Only the senior advisor (an advisor who sees every book) can reset a
+  // locked-out teammate's password — and only on the live backend, where the
+  // secure server function exists.
+  const canResetPasswords =
+    mode === "supabase" && currentUser?.role === "advisor" && Boolean(currentUser?.seesAllBooks);
 
   return (
     <div className="animate-rise space-y-6">

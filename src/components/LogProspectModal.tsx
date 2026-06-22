@@ -2,8 +2,8 @@
 // Voicemails are the whole point — keep calling, keep tracking.
 
 import { useState } from "react";
-import type { AdvisorKey, Prospect, ProspectEventType } from "../types";
-import { ADVISOR_KEYS, ADVISOR_LABELS, PROSPECT_EVENT_LABELS } from "../types";
+import type { Prospect, ProspectEventType, TouchAuthor } from "../types";
+import { TOUCH_AUTHORS, TOUCH_AUTHOR_LABELS, PROSPECT_EVENT_LABELS, authorForUser } from "../types";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { addDays, todayISO } from "../lib/dates";
@@ -31,8 +31,12 @@ export function LogProspectModal({ prospect, onClose }: { prospect: Prospect; on
 
   const [type, setType] = useState<ProspectEventType>("call");
   const [date, setDate] = useState(todayISO());
-  const [advisor, setAdvisor] = useState<AdvisorKey>(
-    prospect.assignedAdvisor !== "joint" ? prospect.assignedAdvisor : currentUser?.advisorKey ?? "matt",
+  const [advisor, setAdvisor] = useState<TouchAuthor>(
+    currentUser?.role === "assistant"
+      ? "assistant" // the assistant logs as herself by default
+      : prospect.assignedAdvisor !== "joint"
+        ? prospect.assignedAdvisor
+        : authorForUser(currentUser),
   );
   const [notes, setNotes] = useState("");
   const [followUpDays, setFollowUpDays] = useState(3);
@@ -76,11 +80,11 @@ export function LogProspectModal({ prospect, onClose }: { prospect: Prospect; on
           <Field label="Date">
             <Input type="date" required value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
           </Field>
-          <Field label="Logged for">
-            <Select value={advisor} onChange={(e) => setAdvisor(e.target.value as AdvisorKey)}>
-              {ADVISOR_KEYS.map((k) => (
+          <Field label="Logged by">
+            <Select value={advisor} onChange={(e) => setAdvisor(e.target.value as TouchAuthor)}>
+              {TOUCH_AUTHORS.map((k) => (
                 <option key={k} value={k}>
-                  {ADVISOR_LABELS[k]}
+                  {TOUCH_AUTHOR_LABELS[k]}
                 </option>
               ))}
             </Select>

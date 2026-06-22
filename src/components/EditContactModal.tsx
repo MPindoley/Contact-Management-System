@@ -3,8 +3,8 @@
 // back to the previous touch (or clears the due date entirely).
 
 import { useState } from "react";
-import type { AdvisorKey, ContactEvent, ContactType } from "../types";
-import { ADVISOR_KEYS, ADVISOR_LABELS, CONTACT_TYPE_LABELS } from "../types";
+import type { ContactEvent, ContactType, TouchAuthor } from "../types";
+import { TOUCH_AUTHORS, TOUCH_AUTHOR_LABELS, CONTACT_TYPE_LABELS } from "../types";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { Button, Field, Input, Modal, Segmented, Select, Spinner, Textarea } from "./ui";
@@ -16,7 +16,7 @@ export function EditContactModal({ event, onClose }: { event: ContactEvent; onCl
 
   const [type, setType] = useState<ContactType>(event.type);
   const [date, setDate] = useState(event.eventDate);
-  const [advisor, setAdvisor] = useState<AdvisorKey>(event.advisor);
+  const [advisor, setAdvisor] = useState<TouchAuthor>(event.advisor);
   const [duration, setDuration] = useState(event.durationMinutes?.toString() ?? "");
   const [notes, setNotes] = useState(event.notes ?? "");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -76,11 +76,11 @@ export function EditContactModal({ event, onClose }: { event: ContactEvent; onCl
           <Field label="Date">
             <Input type="date" required value={date} max={today} onChange={(e) => setDate(e.target.value)} />
           </Field>
-          <Field label="Logged for">
-            <Select value={advisor} onChange={(e) => setAdvisor(e.target.value as AdvisorKey)}>
-              {ADVISOR_KEYS.map((k) => (
+          <Field label="Logged by">
+            <Select value={advisor} onChange={(e) => setAdvisor(e.target.value as TouchAuthor)}>
+              {TOUCH_AUTHORS.map((k) => (
                 <option key={k} value={k}>
-                  {ADVISOR_LABELS[k]}
+                  {TOUCH_AUTHOR_LABELS[k]}
                 </option>
               ))}
             </Select>

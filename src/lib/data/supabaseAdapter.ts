@@ -10,6 +10,7 @@ import type {
   AddProspectInput,
   AdvisorAssignment,
   AdvisorKey,
+  TouchAuthor,
   Client,
   ContactEvent,
   ContactType,
@@ -121,7 +122,7 @@ interface ServiceModelRow {
 interface ContactEventRow {
   id: string;
   client_id: string;
-  advisor: AdvisorKey;
+  advisor: TouchAuthor;
   type: ContactType;
   event_date: string;
   duration_minutes: number | null;
@@ -227,7 +228,7 @@ interface ProspectRow {
 interface ProspectEventRow {
   id: string;
   prospect_id: string;
-  advisor: AdvisorKey;
+  advisor: TouchAuthor;
   type: ProspectEventType;
   event_date: string;
   notes: string | null;

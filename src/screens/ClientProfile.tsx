@@ -7,7 +7,7 @@ import { useApp } from "../lib/store";
 import { useLogContact } from "../components/LogContactModal";
 import { clientScore, modelFor } from "../engine/serviceEngine";
 import { addDays, formatMedium, formatMonth, formatShort, monthKey } from "../lib/dates";
-import { ADVISOR_LABELS, type ContactEvent, type TouchType } from "../types";
+import { TOUCH_AUTHOR_LABELS, type ContactEvent, type TouchType } from "../types";
 import { AdvisorChip, DuePhrase, HeldAwayBadge, TierBadge, TypeChip } from "../components/badges";
 import { ScoreRing } from "../components/ScoreRing";
 import { ClientFormModal } from "../components/ClientFormModal";
@@ -188,7 +188,7 @@ export function ClientProfile() {
                               <p className="text-stone-400 italic">No notes</p>
                             )}
                             <p className="mt-0.5 text-xs text-stone-400">
-                              {ADVISOR_LABELS[e.advisor]}
+                              {TOUCH_AUTHOR_LABELS[e.advisor]}
                               {e.durationMinutes ? ` · ${e.durationMinutes} min` : ""}
                             </p>
                           </div>

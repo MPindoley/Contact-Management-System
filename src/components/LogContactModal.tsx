@@ -11,8 +11,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AdvisorKey, ContactType } from "../types";
-import { ADVISOR_LABELS, ADVISOR_KEYS, CONTACT_TYPE_LABELS } from "../types";
+import type { ContactType, TouchAuthor } from "../types";
+import { TOUCH_AUTHOR_LABELS, TOUCH_AUTHORS, CONTACT_TYPE_LABELS, authorForUser } from "../types";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { addDays, formatMedium, todayISO } from "../lib/dates";
@@ -100,7 +100,7 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   const [type, setType] = useState<ContactType>("call");
   const [date, setDate] = useState(todayISO());
   const [duration, setDuration] = useState<string>("");
-  const [advisor, setAdvisor] = useState<AdvisorKey>(currentUser?.advisorKey ?? "matt");
+  const [advisor, setAdvisor] = useState<TouchAuthor>(authorForUser(currentUser));
   const [notes, setNotes] = useState("");
   // After leaving a voicemail: snooze the call this many days (0 = don't snooze).
   const [tryAgainDays, setTryAgainDays] = useState(3);
@@ -110,10 +110,12 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   // Default the advisor to whoever owns the household (joint → current user).
   useEffect(() => {
     if (!selected) return;
-    if (selected.assignedAdvisor !== "joint") {
+    if (currentUser?.role === "assistant") {
+      setAdvisor("assistant"); // the assistant logs as herself by default
+    } else if (selected.assignedAdvisor !== "joint") {
       setAdvisor(selected.assignedAdvisor);
-    } else if (currentUser?.advisorKey) {
-      setAdvisor(currentUser.advisorKey);
+    } else {
+      setAdvisor(authorForUser(currentUser));
     }
   }, [selected, currentUser]);
 
@@ -290,11 +292,11 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
               onChange={(e) => setDate(e.target.value)}
             />
           </Field>
-          <Field label="Logged for">
-            <Select value={advisor} onChange={(e) => setAdvisor(e.target.value as AdvisorKey)}>
-              {ADVISOR_KEYS.map((k) => (
+          <Field label="Logged by">
+            <Select value={advisor} onChange={(e) => setAdvisor(e.target.value as TouchAuthor)}>
+              {TOUCH_AUTHORS.map((k) => (
                 <option key={k} value={k}>
-                  {ADVISOR_LABELS[k]}
+                  {TOUCH_AUTHOR_LABELS[k]}
                 </option>
               ))}
             </Select>

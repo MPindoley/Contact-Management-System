@@ -8,7 +8,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import {
-  ADVISOR_LABELS,
+  TOUCH_AUTHOR_LABELS,
   PROSPECT_EVENT_LABELS,
   PROSPECT_STATUSES,
   PROSPECT_STATUS_LABELS,
@@ -176,7 +176,7 @@ export function ProspectProfile() {
                             <div className="min-w-0 flex-1 text-[13px] leading-snug">
                               <span className="font-medium">{PROSPECT_EVENT_LABELS[e.type]}</span>
                               {e.notes && <span className="text-ink-soft"> — {e.notes}</span>}
-                              <p className="mt-0.5 text-xs text-stone-400">{ADVISOR_LABELS[e.advisor]}</p>
+                              <p className="mt-0.5 text-xs text-stone-400">{TOUCH_AUTHOR_LABELS[e.advisor]}</p>
                             </div>
                           </li>
                         );
