@@ -76,6 +76,12 @@ export interface DataAdapter {
 
   /** Re-run the nightly rebuild on demand (the "6am job, now" button). */
   rebuildQueue(): Promise<DataSnapshot>;
+  /**
+   * Admin only (Supabase): set a temporary password for a locked-out teammate,
+   * via a server-side function holding the admin key. Returns the temp password
+   * to hand over. Throws in demo mode.
+   */
+  adminResetPassword(targetUserId: string): Promise<{ tempPassword: string; name: string }>;
   /** Demo only: wipe and reseed. */
   reset?(): Promise<DataSnapshot>;
 }

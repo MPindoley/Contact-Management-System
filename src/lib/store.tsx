@@ -88,6 +88,7 @@ interface AppContextValue {
   logProspectContact(input: LogProspectInput): Promise<void>;
   deleteProspectEvent(eventId: string): Promise<void>;
   rebuildQueue(): Promise<void>;
+  adminResetPassword(targetUserId: string): Promise<{ tempPassword: string; name: string }>;
   resetDemo(): Promise<void>;
 }
 
@@ -428,6 +429,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const rebuildQueue = useCallback(() => run(() => adapter.rebuildQueue()), [adapter, run]);
 
+  // Not a data mutation (no snapshot to refresh) — the component shows the
+  // returned temp password and handles its own pending/error state.
+  const adminResetPassword = useCallback(
+    (targetUserId: string) => adapter.adminResetPassword(targetUserId),
+    [adapter],
+  );
+
   const resetDemo = useCallback(async () => {
     if (adapter.reset) await run(() => adapter.reset!());
   }, [adapter, run]);
@@ -468,6 +476,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       logProspectContact,
       deleteProspectEvent,
       rebuildQueue,
+      adminResetPassword,
       resetDemo,
     }),
     [
@@ -477,7 +486,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       planOutreach, updateClient, deleteClient,
       linkFamily, unlinkFromFamily, renameFamily, autoLinkBySurname, updateServiceModel,
       addProspect, updateProspect, deleteProspect, logProspectContact, deleteProspectEvent,
-      rebuildQueue, resetDemo,
+      rebuildQueue, adminResetPassword, resetDemo,
     ],
   );
 

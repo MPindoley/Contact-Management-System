@@ -8,8 +8,9 @@ import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { annualRequired } from "../engine/serviceEngine";
 import { planRetier } from "../engine/retier";
-import type { ServiceModel } from "../types";
+import type { ServiceModel, User } from "../types";
 import { TierBadge } from "../components/badges";
+import { AdminResetModal } from "../components/AdminResetModal";
 import { Button, Field, Input, Spinner, Textarea } from "../components/ui";
 
 function formatMoney(n: number | null): string {
@@ -20,8 +21,13 @@ function formatMoney(n: number | null): string {
 }
 
 export function ServiceModels() {
-  const { data, currentUser } = useApp();
+  const { data, currentUser, mode } = useApp();
+  const [resetting, setResetting] = useState<User | null>(null);
   if (!data) return null;
+
+  // Admins (sees every book) can reset a locked-out teammate's password — only
+  // on the live backend, where the secure server function exists.
+  const canResetPasswords = mode === "supabase" && Boolean(currentUser?.seesAllBooks);
 
   return (
     <div className="animate-rise space-y-6">
@@ -68,10 +74,27 @@ export function ServiceModels() {
                     ? "Advisor — sees all books"
                     : "Advisor — sees only their book + joint"}
               </span>
+              {canResetPasswords && u.id !== currentUser?.id && (
+                <button
+                  type="button"
+                  onClick={() => setResetting(u)}
+                  className="shrink-0 cursor-pointer rounded-md border border-stone-200 px-2 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-stone-50 hover:text-ink"
+                >
+                  Reset password
+                </button>
+              )}
             </li>
           ))}
         </ul>
+        {canResetPasswords && (
+          <p className="mt-3 text-xs text-stone-400">
+            Locked out? Reset a teammate's password and hand them the temporary one — no email
+            needed. They change it after signing in.
+          </p>
+        )}
       </section>
+
+      {resetting && <AdminResetModal user={resetting} onClose={() => setResetting(null)} />}
     </div>
   );
 }

@@ -204,6 +204,10 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
 - **Install on your phone** — it's a PWA: "Add to Home Screen" on iOS/Android
   and it opens full-screen like a native app, with the shell cached for
   flaky-signal moments.
+- **Password help without email** — reset by a 6-digit code (beats corporate
+  link-scanners), and, for locked-down firms that can't send custom email at
+  all, an admin can reset a teammate's password in-app and hand over a
+  temporary one. See [`supabase/README.md`](supabase/README.md).
 
 ## Project layout
 

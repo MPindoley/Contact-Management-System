@@ -550,6 +550,10 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       return snapshot();
     },
 
+    async adminResetPassword() {
+      throw new Error("Password resets are available once you're running on Supabase.");
+    },
+
     async reset() {
       store.removeItem(STORAGE_KEY);
       state = seed();

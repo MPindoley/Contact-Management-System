@@ -664,5 +664,34 @@ export function createSupabaseAdapter(): DataAdapter {
       if (error) throw new Error(`Rebuilding queue: ${error.message}`);
       return fetchSnapshot();
     },
+
+    async adminResetPassword(targetUserId: string) {
+      // The function (admin-reset-password) holds the admin key and re-checks
+      // that the caller is an admin; we just pass our session along.
+      const { data, error } = await db.functions.invoke("admin-reset-password", {
+        body: { targetUserId },
+      });
+      if (error) {
+        // Edge errors arrive as a generic message; surface the function's JSON
+        // reason when we can read it.
+        const reason = await readFunctionError(error);
+        throw new Error(reason ?? "Couldn't reset that password.");
+      }
+      if (!data?.tempPassword) throw new Error(data?.error ?? "Couldn't reset that password.");
+      return { tempPassword: data.tempPassword as string, name: (data.name as string) ?? "" };
+    },
   };
+}
+
+async function readFunctionError(error: unknown): Promise<string | null> {
+  const ctx = (error as { context?: Response })?.context;
+  if (ctx && typeof ctx.json === "function") {
+    try {
+      const body = await ctx.json();
+      if (body?.error) return String(body.error);
+    } catch {
+      /* fall through to the generic message */
+    }
+  }
+  return error instanceof Error ? error.message : null;
 }

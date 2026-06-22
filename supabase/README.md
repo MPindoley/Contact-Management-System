@@ -174,6 +174,38 @@ New households arrive clockless (no invented contact history): they surface
 on the Clients screen for triage — set the right tier, log the first touch,
 and the engine takes over.
 
+## 8. Password resets without email (admin reset)
+
+Built for firms that can't use an outside email sender (no domain to verify)
+and whose email security eats one-time reset links. Instead, an **admin resets
+a teammate's password in the app** and hands over a temporary one — no email in
+the loop.
+
+1. **Deploy the function** (it holds the admin key server-side):
+
+   ```bash
+   supabase functions deploy admin-reset-password
+   ```
+
+   No secrets to set — it uses the built-in `SUPABASE_URL`,
+   `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. (No CLI? Dashboard →
+   Edge Functions → Create a function, name it `admin-reset-password`, and
+   paste `supabase/functions/admin-reset-password/index.ts`.)
+
+2. **Use it**: as an admin, open **Tiers & service models → The people** and
+   click **Reset password** next to a teammate. You get a one-time temporary
+   password to share privately (in person / text / call). They sign in with it,
+   then set their own from the sidebar → **Change password**.
+
+**Who may reset:** any user with `sees_all_books = true` — the senior advisor
+and the assistant by default. To limit it to just the senior advisor, edit the
+check in the function to also require `role = 'advisor'`.
+
+**Security:** the service-role key never reaches the browser; the function
+verifies the caller's login and that they're an admin, and only ever touches
+accounts in your `users` table. If the browser call fails a CORS preflight,
+redeploy with `--no-verify-jwt` (the function still does its own admin check).
+
 ## How the engine works in the database
 
 - Logging a contact (insert into `contact_events`) fires a trigger that:

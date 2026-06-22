@@ -1,7 +1,7 @@
 // App shell: dark ink sidebar, brand, nav, the ever-present "Log contact"
 // action, and the signed-in user. Content renders via <Outlet/>.
 
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { LogContactProvider, useLogContact } from "./LogContactModal";
@@ -99,10 +99,18 @@ function UserFooter() {
             </button>
           </>
         ) : (
-          <span className="flex items-center gap-1.5 text-stone-500">
-            <span className="size-1.5 rounded-full bg-pine-400" />
-            Live · Supabase
-          </span>
+          <>
+            <span className="flex items-center gap-1.5 text-stone-500">
+              <span className="size-1.5 rounded-full bg-pine-400" />
+              Live · Supabase
+            </span>
+            <Link
+              to="/reset-password"
+              className="cursor-pointer text-stone-500 underline-offset-2 hover:text-stone-300 hover:underline"
+            >
+              Change password
+            </Link>
+          </>
         )}
       </div>
       <div className="flex items-center gap-2.5">
