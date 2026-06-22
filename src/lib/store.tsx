@@ -35,6 +35,7 @@ import { createDemoAdapter } from "./data/demoAdapter";
 import { createSupabaseAdapter, getSupabase, isSupabaseConfigured } from "./data/supabaseAdapter";
 import { DEMO_USERS } from "./data/demoSeed";
 import { scopeSnapshot } from "./visibility";
+import { clearStickyState } from "./stickyState";
 import { todayISO } from "./dates";
 
 const DEMO_USER_KEY = "relationship-hub-demo-user";
@@ -274,6 +275,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     if (mode === "supabase") await getSupabase().auth.signOut();
     localStorage.removeItem(DEMO_USER_KEY);
+    clearStickyState();
     setCurrentUser(null);
     setData(null);
   }, [mode]);

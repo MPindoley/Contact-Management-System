@@ -14,6 +14,7 @@ import { ClientFormModal } from "../components/ClientFormModal";
 import { PlanOutreachModal } from "../components/PlanOutreachModal";
 import { LinkFamiliesModal } from "../components/LinkFamiliesModal";
 import { planSurnameLinks } from "../lib/familyLink";
+import { useStickyState } from "../lib/stickyState";
 import { EmptyState } from "../components/EmptyState";
 import { Button, Input, Select } from "../components/ui";
 import { PlusIcon, SearchIcon, SunriseIcon, UsersIcon } from "../components/icons";
@@ -50,15 +51,19 @@ export function Clients() {
     return [...byName.values()].filter((g) => g.length > 1);
   }, [data]);
   const [showDuplicates, setShowDuplicates] = useState(false);
-  const [search, setSearch] = useState("");
-  const [tierFilter, setTierFilter] = useState<"all" | Tier>("all");
+  // Filters are "sticky" per user for the session: they hold as you click into
+  // a household and back, but reset to your own book on a fresh page load.
+  const fk = `clients:${currentUser?.id ?? "anon"}`;
+  const [search, setSearch] = useStickyState(`${fk}:search`, "");
+  const [tierFilter, setTierFilter] = useStickyState<"all" | Tier>(`${fk}:tier`, "all");
   // Default to the signed-in advisor's own book so they don't reset the
   // dropdown every visit; the assistant defaults to everyone.
-  const [advisorFilter, setAdvisorFilter] = useState<"all" | AdvisorAssignment>(
+  const [advisorFilter, setAdvisorFilter] = useStickyState<"all" | AdvisorAssignment>(
+    `${fk}:advisor`,
     () => currentUser?.advisorKey ?? "all",
   );
-  const [showInactive, setShowInactive] = useState(false);
-  const [sort, setSort] = useState<{ key: ClientSortKey; dir: 1 | -1 }>({
+  const [showInactive, setShowInactive] = useStickyState(`${fk}:inactive`, false);
+  const [sort, setSort] = useStickyState<{ key: ClientSortKey; dir: 1 | -1 }>(`${fk}:sort`, {
     key: "household",
     dir: 1,
   });

@@ -5,6 +5,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../lib/store";
+import { useStickyState } from "../lib/stickyState";
 import {
   ADVISOR_LABELS,
   PROSPECT_STATUS_LABELS,
@@ -41,9 +42,15 @@ export function Prospects() {
   const navigate = useNavigate();
   const today = todayISO();
   const [adding, setAdding] = useState(false);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"open" | "all" | ProspectStatus>("open");
-  const [advisorFilter, setAdvisorFilter] = useState<"all" | AdvisorAssignment>(
+  // Sticky per user for the session — hold while navigating, reset on reload.
+  const fk = `prospects:${currentUser?.id ?? "anon"}`;
+  const [search, setSearch] = useStickyState(`${fk}:search`, "");
+  const [statusFilter, setStatusFilter] = useStickyState<"open" | "all" | ProspectStatus>(
+    `${fk}:status`,
+    "open",
+  );
+  const [advisorFilter, setAdvisorFilter] = useStickyState<"all" | AdvisorAssignment>(
+    `${fk}:advisor`,
     () => currentUser?.advisorKey ?? "all",
   );
 
