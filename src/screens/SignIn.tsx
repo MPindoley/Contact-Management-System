@@ -1,7 +1,7 @@
 // Sign in. Demo mode: pick a persona and go. Supabase mode: email + password.
 
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { DEMO_USERS } from "../lib/data/demoSeed";
 import { supabaseConfigWarning } from "../lib/data/supabaseAdapter";
@@ -89,7 +89,6 @@ function DemoSignIn() {
 
 function SupabaseSignIn() {
   const { signInSupabase, signUpSupabase, error: appError } = useApp();
-  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [creating, setCreating] = useState(false);
@@ -114,9 +113,11 @@ function SupabaseSignIn() {
   }
 
   function forgotPassword() {
-    // The reset page owns the whole recovery flow (email → 6-digit code → new
-    // password). Carry along whatever they've already typed.
-    navigate("/reset-password", { state: { email: email.trim() || undefined } });
+    // No email recovery — the firm resets in-house. Point them at the process.
+    setError(null);
+    setNotice(
+      "Locked out? Your firm resets passwords in the app — ask the senior advisor to reset yours (Tiers & service models → The people). They'll hand you a temporary password to sign in with, then you set your own.",
+    );
   }
 
   return (
