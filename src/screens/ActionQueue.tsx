@@ -139,67 +139,127 @@ export function ActionQueue() {
         </Button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:w-auto">
           <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search households…"
-            className="w-56 pl-9"
+            className="w-full pl-9 sm:w-56"
           />
         </div>
-        <div className="w-44">
-          <Select
-            value={advisorFilter}
-            onChange={(e) => setAdvisorFilter(e.target.value as AdvisorFilter)}
-            aria-label="Filter by advisor"
-          >
-            {isAdvisor && <option value="mine">My book + joint</option>}
-            <option value="all">All advisors</option>
-            {(Object.keys(ADVISOR_LABELS) as AdvisorAssignment[]).map((k) => (
-              <option key={k} value={k}>
-                {ADVISOR_LABELS[k]}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="w-32">
-          <Select
-            value={tierFilter}
-            onChange={(e) => setTierFilter(e.target.value as "all" | Tier)}
-            aria-label="Filter by tier"
-          >
-            <option value="all">All tiers</option>
-            {TIERS.map((t) => (
-              <option key={t} value={t}>
-                Tier {t}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="w-44">
-          <Select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as "all" | TouchType)}
-            aria-label="Filter by activity type"
-          >
-            <option value="all">Calls + meetings</option>
-            <option value="call">Calls</option>
-            <option value="meeting">Meetings</option>
-          </Select>
+        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center">
+          <div className="sm:w-44">
+            <Select
+              value={advisorFilter}
+              onChange={(e) => setAdvisorFilter(e.target.value as AdvisorFilter)}
+              aria-label="Filter by advisor"
+            >
+              {isAdvisor && <option value="mine">My book + joint</option>}
+              <option value="all">All advisors</option>
+              {(Object.keys(ADVISOR_LABELS) as AdvisorAssignment[]).map((k) => (
+                <option key={k} value={k}>
+                  {ADVISOR_LABELS[k]}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="sm:w-32">
+            <Select
+              value={tierFilter}
+              onChange={(e) => setTierFilter(e.target.value as "all" | Tier)}
+              aria-label="Filter by tier"
+            >
+              <option value="all">All tiers</option>
+              {TIERS.map((t) => (
+                <option key={t} value={t}>
+                  Tier {t}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="col-span-2 sm:col-auto sm:w-44">
+            <Select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as "all" | TouchType)}
+              aria-label="Filter by activity type"
+            >
+              <option value="all">Calls + meetings</option>
+              <option value="call">Calls</option>
+              <option value="meeting">Meetings</option>
+            </Select>
+          </div>
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
-        {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className="card">
           <EmptyState
             icon={<CheckCircleIcon className="size-5" />}
             title="Queue clear"
             hint="No open items match these filters."
           />
-        ) : (
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+        </div>
+      ) : (
+        <>
+          {/* Phone: tap-through cards */}
+          <div className="space-y-2.5 md:hidden">
+            {rows.map(({ task, client }) => (
+              <div
+                key={task.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/clients/${client.id}`)}
+                onKeyDown={(e) => e.key === "Enter" && navigate(`/clients/${client.id}`)}
+                className="card cursor-pointer p-3 transition-colors active:bg-pine-50/60"
+              >
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <PriorityPill priority={task.priority} />
+                      <span className="min-w-0 truncate font-semibold">{client.householdName}</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                      <TierBadge tier={client.tier} />
+                      <TypeChip type={task.type} short />
+                      <AdvisorChip advisor={client.assignedAdvisor} />
+                      <DuePhrase dueDate={task.dueDate} today={today} />
+                      {outreach.has(`${task.clientId}:${task.type}`) && <OutreachBadge />}
+                      {client.heldAway && <HeldAwayBadge note={client.heldAwayNote} />}
+                    </div>
+                    {task.type === "call" && client.phone && (
+                      <span onClick={(e) => e.stopPropagation()} className="mt-1.5 inline-block">
+                        <PhoneLink phone={client.phone} className="text-[13px]" />
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="flex shrink-0 items-center gap-1.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <SnoozeButton
+                      clientId={client.id}
+                      type={task.type}
+                      householdName={client.householdName}
+                      compact
+                    />
+                    <button
+                      type="button"
+                      onClick={() => open(client.id)}
+                      className="cursor-pointer rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm transition-colors hover:border-pine-600 hover:bg-pine-700 hover:text-white"
+                    >
+                      Log
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: the full sortable table */}
+          <div className="card hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/60">
                 {headerCell("severity", "Priority")}
@@ -274,8 +334,9 @@ export function ActionQueue() {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -117,49 +117,51 @@ export function Prospects() {
         </Button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:w-auto">
           <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search prospects…"
-            className="w-56 pl-9"
+            className="w-full pl-9 sm:w-56"
           />
         </div>
-        <div className="w-40">
-          <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            aria-label="Filter by status"
-          >
-            <option value="open">Open pipeline</option>
-            <option value="all">All statuses</option>
-            {(Object.keys(PROSPECT_STATUS_LABELS) as ProspectStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {PROSPECT_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="w-44">
-          <Select
-            value={advisorFilter}
-            onChange={(e) => setAdvisorFilter(e.target.value as "all" | AdvisorAssignment)}
-            aria-label="Filter by advisor"
-          >
-            <option value="all">All advisors</option>
-            {(Object.keys(ADVISOR_LABELS) as AdvisorAssignment[]).map((k) => (
-              <option key={k} value={k}>
-                {ADVISOR_LABELS[k]}
-              </option>
-            ))}
-          </Select>
+        <div className="flex gap-2.5">
+          <div className="flex-1 sm:w-40 sm:flex-none">
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              aria-label="Filter by status"
+            >
+              <option value="open">Open pipeline</option>
+              <option value="all">All statuses</option>
+              {(Object.keys(PROSPECT_STATUS_LABELS) as ProspectStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {PROSPECT_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex-1 sm:w-44 sm:flex-none">
+            <Select
+              value={advisorFilter}
+              onChange={(e) => setAdvisorFilter(e.target.value as "all" | AdvisorAssignment)}
+              aria-label="Filter by advisor"
+            >
+              <option value="all">All advisors</option>
+              {(Object.keys(ADVISOR_LABELS) as AdvisorAssignment[]).map((k) => (
+                <option key={k} value={k}>
+                  {ADVISOR_LABELS[k]}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
-        {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className="card">
           <EmptyState
             icon={<TargetIcon className="size-5" />}
             title={data.prospects.length === 0 ? "No prospects yet" : "No matches"}
@@ -169,8 +171,57 @@ export function Prospects() {
                 : "Try widening the filters."
             }
           />
-        ) : (
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+        </div>
+      ) : (
+        <>
+          {/* Phone: tap-through cards */}
+          <div className="space-y-2.5 md:hidden">
+            {rows.map(({ prospect, attempts, voicemails }) => {
+              const due = prospect.nextFollowUp && prospect.nextFollowUp <= today;
+              return (
+                <div
+                  key={prospect.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/prospects/${prospect.id}`)}
+                  onKeyDown={(e) => e.key === "Enter" && navigate(`/prospects/${prospect.id}`)}
+                  className="card cursor-pointer p-3 transition-colors active:bg-pine-50/60"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate font-semibold">{prospect.name}</span>
+                    <ProspectStatusBadge status={prospect.status} />
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
+                    <AdvisorChip advisor={prospect.assignedAdvisor} />
+                    <span className="tnum inline-flex items-center gap-1">
+                      {attempts} {attempts === 1 ? "attempt" : "attempts"}
+                      {voicemails > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-violet-700">
+                          <VoicemailIcon className="size-3" />
+                          {voicemails}
+                        </span>
+                      )}
+                    </span>
+                    {prospect.nextFollowUp && (
+                      <span className={due ? "font-medium text-clay-700" : ""}>
+                        Follow up {formatShort(prospect.nextFollowUp)}
+                        {due ? " · due" : ""}
+                      </span>
+                    )}
+                  </div>
+                  {prospect.phone && (
+                    <span onClick={(e) => e.stopPropagation()} className="mt-1.5 inline-block">
+                      <PhoneLink phone={prospect.phone} className="text-[13px]" />
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: the full table */}
+          <div className="card hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/60 text-left text-[11px] font-semibold tracking-wider text-ink-soft uppercase">
                 <th className="px-4 py-2.5">Prospect</th>
@@ -231,8 +282,9 @@ export function Prospects() {
               })}
             </tbody>
           </table>
-        )}
-      </div>
+          </div>
+        </>
+      )}
 
       {adding && <ProspectFormModal onClose={() => setAdding(false)} />}
     </div>

@@ -185,43 +185,45 @@ export function Clients() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:w-auto">
           <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search households…"
-            className="w-56 pl-9"
+            className="w-full pl-9 sm:w-56"
           />
         </div>
-        <div className="w-32">
-          <Select
-            value={tierFilter}
-            onChange={(e) => setTierFilter(e.target.value as "all" | Tier)}
-            aria-label="Filter by tier"
-          >
-            <option value="all">All tiers</option>
-            {TIERS.map((t) => (
-              <option key={t} value={t}>
-                Tier {t}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="w-44">
-          <Select
-            value={advisorFilter}
-            onChange={(e) => setAdvisorFilter(e.target.value as "all" | AdvisorAssignment)}
-            aria-label="Filter by advisor"
-          >
-            <option value="all">All advisors</option>
-            {(Object.keys(ADVISOR_LABELS) as AdvisorAssignment[]).map((k) => (
-              <option key={k} value={k}>
-                {ADVISOR_LABELS[k]}
-              </option>
-            ))}
-          </Select>
+        <div className="flex gap-2.5">
+          <div className="flex-1 sm:w-32 sm:flex-none">
+            <Select
+              value={tierFilter}
+              onChange={(e) => setTierFilter(e.target.value as "all" | Tier)}
+              aria-label="Filter by tier"
+            >
+              <option value="all">All tiers</option>
+              {TIERS.map((t) => (
+                <option key={t} value={t}>
+                  Tier {t}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex-1 sm:w-44 sm:flex-none">
+            <Select
+              value={advisorFilter}
+              onChange={(e) => setAdvisorFilter(e.target.value as "all" | AdvisorAssignment)}
+              aria-label="Filter by advisor"
+            >
+              <option value="all">All advisors</option>
+              {(Object.keys(ADVISOR_LABELS) as AdvisorAssignment[]).map((k) => (
+                <option key={k} value={k}>
+                  {ADVISOR_LABELS[k]}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-soft select-none">
           <input
@@ -234,8 +236,8 @@ export function Clients() {
         </label>
       </div>
 
-      <div className="card overflow-x-auto">
-        {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className="card">
           <EmptyState
             icon={<UsersIcon className="size-5" />}
             title={data.clients.length === 0 ? "No households yet" : "No matches"}
@@ -245,8 +247,44 @@ export function Clients() {
                 : "Try widening the filters."
             }
           />
-        ) : (
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+        </div>
+      ) : (
+        <>
+          {/* Phone: tap-through cards */}
+          <div className="space-y-2.5 md:hidden">
+            {rows.map(({ client, lastContact, nextDue, score }) => (
+              <button
+                key={client.id}
+                type="button"
+                onClick={() => navigate(`/clients/${client.id}`)}
+                className="card flex w-full items-center gap-3 p-3 text-left transition-colors active:bg-pine-50/60"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-semibold">{client.householdName}</span>
+                    {!client.active && (
+                      <span className="shrink-0 rounded-full bg-stone-200 px-1.5 py-0.5 text-[10px] font-semibold text-stone-600 uppercase">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <TierBadge tier={client.tier} />
+                    <AdvisorChip advisor={client.assignedAdvisor} />
+                    {nextDue && client.active && <DuePhrase dueDate={nextDue.dueDate} today={today} />}
+                  </div>
+                  <p className="tnum mt-1 text-xs text-stone-400">
+                    Last contact: {lastContact ? formatShort(lastContact.eventDate) : "—"}
+                  </p>
+                </div>
+                <ScorePill score={score} />
+              </button>
+            ))}
+          </div>
+
+          {/* Desktop: the full sortable table */}
+          <div className="card hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/60 text-left text-[11px] font-semibold tracking-wider text-ink-soft uppercase">
                 <SortHeader label="Household" sortKey="household" sort={sort} onSort={toggleSort} />
@@ -295,8 +333,9 @@ export function Clients() {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+          </div>
+        </>
+      )}
 
       <ClientFormModal open={adding} onClose={() => setAdding(false)} />
       {planning && <PlanOutreachModal onClose={() => setPlanning(false)} />}

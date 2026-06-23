@@ -18,12 +18,12 @@ import {
 } from "./icons";
 
 const NAV = [
-  { to: "/", label: "Morning Dashboard", Icon: SunriseIcon, end: true },
-  { to: "/queue", label: "Action Queue", Icon: QueueIcon },
-  { to: "/clients", label: "Clients", Icon: UsersIcon },
-  { to: "/prospects", label: "Prospects", Icon: TargetIcon },
-  { to: "/report", label: "Firm Report", Icon: ChartIcon },
-  { to: "/settings/service-models", label: "Service Models", Icon: SlidersIcon },
+  { to: "/", label: "Morning Dashboard", short: "Today", Icon: SunriseIcon, end: true },
+  { to: "/queue", label: "Action Queue", short: "Queue", Icon: QueueIcon },
+  { to: "/clients", label: "Clients", short: "Clients", Icon: UsersIcon },
+  { to: "/prospects", label: "Prospects", short: "Prospects", Icon: TargetIcon },
+  { to: "/report", label: "Firm Report", short: "Report", Icon: ChartIcon },
+  { to: "/settings/service-models", label: "Service Models", short: "Tiers", Icon: SlidersIcon },
 ];
 
 function navClass({ isActive }: { isActive: boolean }): string {
@@ -158,32 +158,37 @@ export function Layout() {
         <UserFooter />
       </aside>
 
-      {/* Mobile header */}
-      <header className="no-print sticky top-0 z-30 border-b border-white/10 bg-ink px-4 py-3 md:hidden">
-        <div className="flex items-center justify-between gap-3">
-          <Brand />
-          <LogContactButton compact />
-        </div>
-        <nav className="-mx-1 mt-3 flex gap-1 overflow-x-auto pb-0.5">
-          {NAV.map(({ to, label, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                `rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                  isActive ? "bg-white/15 text-white" : "text-stone-400 hover:text-stone-200"
-                }`
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
-        </nav>
+      {/* Mobile top bar: brand + the ever-present Log action */}
+      <header className="no-print sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-ink px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:hidden">
+        <Brand />
+        <LogContactButton compact />
       </header>
 
+      {/* Mobile bottom tab bar — the app-like primary nav */}
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden">
+        {NAV.map(({ to, short, Icon, end }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-0.5 px-0.5 pt-2 pb-1.5 text-[10px] font-medium transition-colors ${
+                isActive ? "text-pine-700" : "text-stone-400 hover:text-ink"
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Icon className={`size-5 ${isActive ? "text-pine-600" : ""}`} />
+                <span className="truncate">{short}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
+
       <main className="min-h-screen md:pl-60">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-8 md:py-8">
+        <div className="mx-auto max-w-6xl px-4 pt-6 pb-28 sm:px-6 md:px-8 md:py-8">
           {error && (
             <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-clay-200 bg-clay-50 px-4 py-3 text-sm text-clay-900">
               <span className="min-w-0">{error}</span>
