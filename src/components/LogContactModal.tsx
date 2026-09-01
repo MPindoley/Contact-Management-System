@@ -378,12 +378,12 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
           </div>
         </Field>
 
-        <Field label="Notes (optional)" hint="Tip: use your phone's mic and just talk — it'll pick out the opportunities and a follow-up date.">
+        <Field label="Notes (optional)">
           <Textarea
             rows={3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="What mattered in this touch?"
+            placeholder="What mattered in this touch? Tap your mic and just talk."
           />
         </Field>
 
