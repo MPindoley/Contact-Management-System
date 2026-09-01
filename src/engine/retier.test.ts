@@ -13,7 +13,7 @@ let seq = 0;
 const mk = (o: Partial<Client> = {}): Client => ({
   id: `c${seq++}`, householdName: `HH${seq}`, assignedAdvisor: "matt", tier: "C", active: true,
   phone: null, redtailId: null, revenue: null, heldAway: false, heldAwayNote: null,
-  familyId: null, familyRole: null, createdAt: "", ...o,
+  familyId: null, familyRole: null, tags: [], createdAt: "", ...o,
 });
 
 describe("planRetier", () => {

@@ -195,6 +195,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         heldAwayNote: input.heldAwayNote?.trim() || null,
         familyId: null,
         familyRole: null,
+        tags: input.tags ?? [],
         createdAt: now,
       };
       s.snapshot.clients.push(client);
@@ -241,6 +242,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
           heldAwayNote: input.heldAwayNote?.trim() || null,
           familyId: null,
           familyRole: null,
+          tags: input.tags ?? [],
           createdAt: now,
         };
         s.snapshot.clients.push(client);
@@ -362,6 +364,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         if (patch.familyRole !== undefined) client.familyRole = patch.familyRole;
         if (patch.heldAway !== undefined) client.heldAway = patch.heldAway;
         if (patch.heldAwayNote !== undefined) client.heldAwayNote = patch.heldAwayNote?.trim() || null;
+        if (patch.tags !== undefined) client.tags = patch.tags;
         if (tierChanged) recomputeClient(clientId);
         rebuild(todayISO());
       }

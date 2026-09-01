@@ -12,6 +12,7 @@ import type {
   AdvisorKey,
   TouchAuthor,
   Client,
+  ClientTag,
   ContactEvent,
   ContactType,
   DataSnapshot,
@@ -105,6 +106,7 @@ interface ClientRow {
   held_away_note: string | null;
   family_id: string | null;
   family_role: FamilyRole | null;
+  tags: ClientTag[] | null;
   created_at: string;
 }
 interface FamilyRow {
@@ -170,6 +172,7 @@ const mapClient = (r: ClientRow): Client => ({
   heldAwayNote: r.held_away_note,
   familyId: r.family_id ?? null,
   familyRole: r.family_role ?? null,
+  tags: r.tags ?? [],
   createdAt: r.created_at,
 });
 const mapFamily = (r: FamilyRow): Family => ({
@@ -333,6 +336,7 @@ export function createSupabaseAdapter(): DataAdapter {
           revenue: input.revenue,
           held_away: input.heldAway,
           held_away_note: input.heldAwayNote?.trim() || null,
+          tags: input.tags ?? [],
         })
         .select("id")
         .single();
@@ -377,6 +381,7 @@ export function createSupabaseAdapter(): DataAdapter {
               revenue: c.revenue,
               held_away: c.heldAway,
               held_away_note: c.heldAwayNote?.trim() || null,
+              tags: c.tags ?? [],
             })),
           )
           .select("id");
@@ -425,6 +430,7 @@ export function createSupabaseAdapter(): DataAdapter {
         if (patch.familyRole !== undefined) row.family_role = patch.familyRole;
         if (patch.heldAway !== undefined) row.held_away = patch.heldAway;
         if (patch.heldAwayNote !== undefined) row.held_away_note = patch.heldAwayNote?.trim() || null;
+        if (patch.tags !== undefined) row.tags = patch.tags;
         if (Object.keys(row).length === 0) continue;
         const { error } = await db.from("clients").update(row).eq("id", id);
         if (error) throw new Error(`Updating ${id}: ${error.message}`);
@@ -481,6 +487,7 @@ export function createSupabaseAdapter(): DataAdapter {
       if (patch.familyRole !== undefined) row.family_role = patch.familyRole;
       if (patch.heldAway !== undefined) row.held_away = patch.heldAway;
       if (patch.heldAwayNote !== undefined) row.held_away_note = patch.heldAwayNote?.trim() || null;
+      if (patch.tags !== undefined) row.tags = patch.tags;
 
       const { error } = await db.from("clients").update(row).eq("id", clientId);
       if (error) throw new Error(`Updating client: ${error.message}`);

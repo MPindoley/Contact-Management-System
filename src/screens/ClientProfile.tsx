@@ -8,7 +8,7 @@ import { useLogContact } from "../components/LogContactModal";
 import { clientScore, modelFor } from "../engine/serviceEngine";
 import { addDays, formatMedium, formatMonth, formatShort, monthKey } from "../lib/dates";
 import { TOUCH_AUTHOR_LABELS, type ContactEvent, type TouchType } from "../types";
-import { AdvisorChip, DuePhrase, HeldAwayBadge, TierBadge, TypeChip } from "../components/badges";
+import { AdvisorChip, DuePhrase, HeldAwayBadge, TagChip, TierBadge, TypeChip } from "../components/badges";
 import { ScoreRing } from "../components/ScoreRing";
 import { ClientFormModal } from "../components/ClientFormModal";
 import { EditContactModal } from "../components/EditContactModal";
@@ -107,6 +107,13 @@ export function ClientProfile() {
                 {client.redtailId ? ` · Redtail #${client.redtailId}` : ""}
               </span>
             </div>
+            {client.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {client.tags.map((t) => (
+                  <TagChip key={t} tag={t} />
+                ))}
+              </div>
+            )}
             {client.heldAway && client.heldAwayNote && (
               <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[13px] font-medium text-emerald-900">
                 💰 {client.heldAwayNote}

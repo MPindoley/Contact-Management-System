@@ -3,7 +3,7 @@
 // it — a couple of touches due today, a spread of overdue items, and a few
 // things on the horizon. Deterministic (seeded PRNG), so resets are stable.
 
-import type { AdvisorAssignment, AdvisorKey, Client, ContactEvent, ContactType, DataSnapshot, Family, Prospect, ProspectEvent, ServiceModel, Tier, User } from "../../types";
+import type { AdvisorAssignment, AdvisorKey, Client, ClientTag, ContactEvent, ContactType, DataSnapshot, Family, Prospect, ProspectEvent, ServiceModel, Tier, User } from "../../types";
 import { addDays } from "../dates";
 import { computeClientDueDates, rebuildAllTasks } from "../../engine/serviceEngine";
 
@@ -60,6 +60,21 @@ const SPECS: SeedSpec[] = [
   { name: "Nguyen, Grace",              tier: "C", advisor: "matt",      lastMeeting: -50,  lastCall: -20,  discipline: 1.0 },
   { name: "Nguyen, Robert & Lin",       tier: "B", advisor: "advisor_b", lastMeeting: -45,  lastCall: -15,  discipline: 1.0 },
 ];
+
+// Opportunity tags on the demo book, so searching "roth" or filtering by a tag
+// shows something straight away.
+const DEMO_TAGS: Record<string, ClientTag[]> = {
+  "Whitfield, Daniel & Mara": ["roth_conversion", "estate_beneficiary"],
+  "Castellanos Family": ["roth_conversion", "side_fund"],
+  "Okafor, Samuel & Adaeze": ["ltc_insurance"],
+  "Vogel, Peter & Anneliese": ["roth_conversion", "money_due"],
+  "Beauchamp, Claire": ["side_fund"],
+  "Fitzgerald, Owen & June": ["ltc_insurance", "life_insurance"],
+  "Park, Henry & Soo-Jin": ["college_529"],
+  "Abernathy, Gordon": ["rmd", "money_due"],
+  "Salazar Family": ["tax_planning"],
+  "Mercer-Liang Household": ["roth_conversion"],
+};
 
 const MEETING_NOTES = [
   "Annual review — portfolio on plan, revisit 529 in the fall.",
@@ -140,6 +155,7 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
       heldAwayNote: i % 5 === 0 ? "~$180k 401(k) still at a previous custodian." : null,
       familyId: null,
       familyRole: null,
+      tags: DEMO_TAGS[spec.name] ?? [],
       createdAt: `${addDays(today, oldest)}T09:00:00.000Z`,
     });
 

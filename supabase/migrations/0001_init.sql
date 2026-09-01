@@ -72,9 +72,14 @@ create table clients (
   held_away_note   text,
   family_id        uuid references families (id) on delete set null,
   family_role      family_role,
+  -- Opportunity tags (roth_conversion, side_fund, …). Free text so new tags
+  -- are an app-side change only; the app owns the canonical list.
+  tags             text[] not null default '{}',
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+
+create index clients_tags_idx on clients using gin (tags);
 
 create index clients_family_idx on clients (family_id) where family_id is not null;
 

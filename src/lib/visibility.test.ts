@@ -10,7 +10,7 @@ let seq = 0;
 const mkClient = (o: Partial<Client> = {}): Client => ({
   id: `c${seq++}`, householdName: "H", assignedAdvisor: "matt", tier: "B", active: true,
   phone: null, redtailId: null, revenue: null, heldAway: false, heldAwayNote: null,
-  familyId: null, familyRole: null, createdAt: "", ...o,
+  familyId: null, familyRole: null, tags: [], createdAt: "", ...o,
 });
 const mkProspect = (o: Partial<Prospect> = {}): Prospect => ({
   id: `p${seq++}`, name: "P", assignedAdvisor: "matt", phone: null, status: "new",

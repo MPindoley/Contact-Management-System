@@ -102,6 +102,7 @@ describe("demo adapter — full service loop", () => {
       revenue: null,
       heldAway: false,
       heldAwayNote: null,
+      tags: [],
       lastMeetingDate: addDays(today, -10),
       lastCallDate: addDays(today, -35), // call overdue for Tier A (30d)
     });
@@ -196,6 +197,7 @@ describe("demo adapter — full service loop", () => {
       revenue: null,
       heldAway: false,
       heldAwayNote: null,
+      tags: [],
       lastMeetingDate: null,
       lastCallDate: null,
     });

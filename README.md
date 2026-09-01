@@ -138,6 +138,16 @@ the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.
   the AUM on file (family members on their **combined** assets), and any
   household with no AUM is left exactly as you set it, so hand-tuned tiers are
   never clobbered. Applying reflows due dates through the same engine.
+- **Opportunity tags** — flag a household with the work that's sitting there:
+  **Roth Conversion, Side Fund, Long-Term Care Insurance, Money Due**, plus life
+  insurance, 529/college, estate & beneficiary, tax planning, annuity review and
+  RMD. Tick them under **Opportunities** on the client form — collapsed by
+  default so the form stays calm, then a tidy grid of checkboxes. Tags show as
+  chips on the profile and the client list, and the Clients **search matches
+  them**: type "roth" and every Roth-conversion household comes up. There's also
+  an **All opportunities** dropdown to filter the book to one tag. Adding a new
+  tag is a one-line change to `CLIENT_TAG_LABELS` in `src/types.ts` — no
+  migration needed.
 - **Money to capture** — flag a household that has held-away assets or money
   due (checkbox + a note, or a "Money to Capture" CSV column). It shows a
   green **$ Capture** highlight on the dashboard, queue, profile, and the

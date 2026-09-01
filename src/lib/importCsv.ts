@@ -394,7 +394,7 @@ export function buildImportPreview(csv: ParsedCsv, options: ImportOptions): Impo
       status: "new",
       changes: [],
       warnings,
-      input: { householdName: name, assignedAdvisor: advisor, tier, phone, redtailId, revenue, heldAway, heldAwayNote: null, lastMeetingDate, lastCallDate },
+      input: { householdName: name, assignedAdvisor: advisor, tier, phone, redtailId, revenue, heldAway, heldAwayNote: null, tags: [], lastMeetingDate, lastCallDate },
     });
   });
 

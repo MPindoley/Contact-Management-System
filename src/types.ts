@@ -19,6 +19,24 @@ export type TouchType = "meeting" | "call";
 export type Priority = "high" | "medium" | "low";
 export type TaskStatus = "open" | "done";
 
+/**
+ * Opportunity tags you can flag on a household — "there's a Roth conversion
+ * here", "they need long-term care". Tick them on the client form, then search
+ * or filter the book by them. To add one, add a line to CLIENT_TAGS below; the
+ * form, search, filter and chips all pick it up automatically.
+ */
+export type ClientTag =
+  | "roth_conversion"
+  | "side_fund"
+  | "ltc_insurance"
+  | "money_due"
+  | "life_insurance"
+  | "college_529"
+  | "estate_beneficiary"
+  | "tax_planning"
+  | "annuity_review"
+  | "rmd";
+
 export interface User {
   id: string;
   name: string;
@@ -45,6 +63,8 @@ export interface Client {
   /** Family link — multiple households grouped (spouses, parents, kids…). */
   familyId: string | null;
   familyRole: FamilyRole | null;
+  /** Opportunity tags (Roth conversion, side fund…). Searchable and filterable. */
+  tags: ClientTag[];
   createdAt: string;
 }
 
@@ -216,6 +236,7 @@ export interface AddClientInput {
   revenue: number | null;
   heldAway: boolean;
   heldAwayNote: string | null;
+  tags: ClientTag[];
   // Seeds the service clock — "when did you last actually touch this client?"
   lastMeetingDate: string | null;
   lastCallDate: string | null;
@@ -232,6 +253,7 @@ export interface UpdateClientInput {
   heldAwayNote?: string | null;
   familyId?: string | null;
   familyRole?: FamilyRole | null;
+  tags?: ClientTag[];
 }
 
 export const FAMILY_ROLE_LABELS: Record<FamilyRole, string> = {
@@ -261,6 +283,32 @@ export const ADVISOR_LABELS: Record<AdvisorAssignment, string> = {
   advisor_b: "Beau",
   joint: "Joint",
 };
+
+/**
+ * The opportunity tags, in the order they appear on the client form.
+ * Add or rename freely — everything else follows from this list.
+ */
+export const CLIENT_TAG_LABELS: Record<ClientTag, string> = {
+  roth_conversion: "Roth Conversion",
+  side_fund: "Side Fund",
+  ltc_insurance: "Long-Term Care Insurance",
+  money_due: "Money Due",
+  life_insurance: "Life Insurance",
+  college_529: "529 / College Funding",
+  estate_beneficiary: "Estate / Beneficiary Review",
+  tax_planning: "Tax Planning",
+  annuity_review: "Annuity Review",
+  rmd: "RMD",
+};
+
+export const CLIENT_TAGS = Object.keys(CLIENT_TAG_LABELS) as ClientTag[];
+
+/** Does this household match a free-text search of its tags? */
+export function clientMatchesTagSearch(tags: ClientTag[], query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  return tags.some((t) => CLIENT_TAG_LABELS[t]?.toLowerCase().includes(q));
+}
 
 export const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
   meeting: "Meeting",
