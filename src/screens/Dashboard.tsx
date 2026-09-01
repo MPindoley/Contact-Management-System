@@ -51,6 +51,18 @@ export function Dashboard() {
       meetingsToday: sortByTierThenName(buckets.meetingsToday, byId),
       overdue: buckets.overdue,
       horizon: buckets.upcoming.filter((t) => t.dueDate <= addDays(today, 7)),
+      // Booked meetings are parked off the queue, so surface them here —
+      // otherwise an appointment would simply vanish from the morning view.
+      scheduled: data.clients
+        .filter(
+          (c) =>
+            c.active &&
+            c.nextMeetingDate !== null &&
+            c.nextMeetingDate >= today &&
+            c.nextMeetingDate <= addDays(today, 7) &&
+            (!useScope || clientInScope(c, scope)),
+        )
+        .sort((a, b) => (a.nextMeetingDate ?? "").localeCompare(b.nextMeetingDate ?? "")),
     };
   }, [data, currentUser, today, view]);
 
@@ -156,13 +168,31 @@ export function Dashboard() {
         </Column>
       </div>
 
-      {derived.horizon.length > 0 && (
+      {(derived.horizon.length > 0 || derived.scheduled.length > 0) && (
         <section className="card p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <ClockIcon className="size-4 text-stone-400" />
             On the horizon — next 7 days
           </h2>
           <ul className="mt-3 divide-y divide-stone-100">
+            {derived.scheduled.map((c) => (
+              <li key={`sched-${c.id}`} className="flex items-center gap-3 py-2 text-sm">
+                <span className="tnum w-14 shrink-0 text-xs font-semibold text-ink-soft">
+                  {formatShort(c.nextMeetingDate!)}
+                </span>
+                <CalendarIcon className="size-3.5 shrink-0 text-pine-600" />
+                <Link
+                  to={`/clients/${c.id}`}
+                  className="min-w-0 flex-1 truncate font-medium hover:underline"
+                >
+                  {c.householdName}
+                </Link>
+                <span className="shrink-0 rounded-full bg-pine-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-pine-800 uppercase">
+                  Booked
+                </span>
+                <TierBadge tier={c.tier} />
+              </li>
+            ))}
             {derived.horizon.map((t) => {
               const client = derived.byId.get(t.clientId)!;
               return (

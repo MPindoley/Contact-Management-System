@@ -14,6 +14,7 @@ import { ClientFormModal } from "../components/ClientFormModal";
 import { EditContactModal } from "../components/EditContactModal";
 import { EmptyState } from "../components/EmptyState";
 import { FamilyPanel } from "../components/FamilyPanel";
+import { UpcomingMeetingPanel } from "../components/UpcomingMeetingPanel";
 import { PhoneLink } from "../components/PhoneLink";
 import { Button } from "../components/ui";
 import { CalendarIcon, ClockIcon, PhoneIcon, PlusIcon, VoicemailIcon } from "../components/icons";
@@ -140,6 +141,7 @@ export function ClientProfile() {
               due={derived.meetingDue?.dueDate ?? null}
               basedOn={derived.meetingDue?.computedFromEventId ?? null}
               snoozedUntil={derived.meetingDue?.snoozedUntil ?? null}
+              bookedFor={client.nextMeetingDate}
               eventsById={derived.eventsById}
               today={today}
               active={client.active}
@@ -223,6 +225,7 @@ export function ClientProfile() {
         </div>
 
         <aside className="space-y-4">
+          <UpcomingMeetingPanel client={client} />
           <FamilyPanel client={client} />
           <section className="card flex flex-col items-center p-5">
             <h2 className="self-start text-sm font-semibold">Service health</h2>
@@ -272,6 +275,7 @@ function DueCard({
   due,
   basedOn,
   snoozedUntil,
+  bookedFor = null,
   voicemailsSince = 0,
   eventsById,
   today,
@@ -283,6 +287,8 @@ function DueCard({
   due: string | null;
   basedOn: string | null;
   snoozedUntil: string | null;
+  /** A booked meeting parks this touch — say so rather than "snoozed". */
+  bookedFor?: string | null;
   voicemailsSince?: number;
   eventsById: Map<string, { eventDate: string }>;
   today: string;
@@ -293,6 +299,8 @@ function DueCard({
   const tone = type === "meeting" ? "text-pine-700 bg-pine-50" : "text-sky-700 bg-sky-50";
   const source = basedOn ? eventsById.get(basedOn) : null;
   const isSnoozed = snoozedUntil !== null && snoozedUntil > today;
+  // The parking came from a booked meeting, not someone hitting snooze.
+  const isBooked = isSnoozed && bookedFor !== null && bookedFor === snoozedUntil;
   const overdue = due !== null && due < today && active && !isSnoozed;
 
   return (
@@ -318,22 +326,28 @@ function DueCard({
               <span className="text-xs font-medium text-gold-700">· first outreach</span>
             )}
           </div>
-          {isSnoozed && (
-            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-amber-900">
-                <ClockIcon className="size-3.5" />
-                Snoozed until {formatMedium(snoozedUntil!)}
-              </span>
-              <button
-                type="button"
-                onClick={() => void snoozeTouch(clientId, type, null)}
-                title={`Bring ${householdName} back to the queue now`}
-                className="cursor-pointer text-xs font-medium text-amber-900 underline-offset-2 hover:underline"
-              >
-                Un-snooze
-              </button>
-            </div>
-          )}
+          {isSnoozed &&
+            (isBooked ? (
+              <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-pine-50 px-2.5 py-1.5 text-xs font-medium text-pine-800">
+                <CalendarIcon className="size-3.5" />
+                Meeting booked for {formatMedium(snoozedUntil!)}
+              </div>
+            ) : (
+              <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-amber-900">
+                  <ClockIcon className="size-3.5" />
+                  Snoozed until {formatMedium(snoozedUntil!)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void snoozeTouch(clientId, type, null)}
+                  title={`Bring ${householdName} back to the queue now`}
+                  className="cursor-pointer text-xs font-medium text-amber-900 underline-offset-2 hover:underline"
+                >
+                  Un-snooze
+                </button>
+              </div>
+            ))}
           {type === "call" && voicemailsSince > 0 && (
             <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-violet-700">
               <VoicemailIcon className="size-3.5" />

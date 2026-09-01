@@ -107,6 +107,8 @@ interface ClientRow {
   family_id: string | null;
   family_role: FamilyRole | null;
   tags: ClientTag[] | null;
+  next_meeting_date: string | null;
+  next_meeting_note: string | null;
   created_at: string;
 }
 interface FamilyRow {
@@ -173,6 +175,8 @@ const mapClient = (r: ClientRow): Client => ({
   familyId: r.family_id ?? null,
   familyRole: r.family_role ?? null,
   tags: r.tags ?? [],
+  nextMeetingDate: r.next_meeting_date ?? null,
+  nextMeetingNote: r.next_meeting_note ?? null,
   createdAt: r.created_at,
 });
 const mapFamily = (r: FamilyRow): Family => ({
@@ -321,6 +325,15 @@ export function createSupabaseAdapter(): DataAdapter {
         notes: input.notes?.trim() || null,
       });
       if (error) throw new Error(`Logging contact: ${error.message}`);
+      // A booked meeting that has now happened is no longer upcoming; a booking
+      // further out (a different appointment) is left alone.
+      if (input.type === "meeting") {
+        await db
+          .from("clients")
+          .update({ next_meeting_date: null, next_meeting_note: null })
+          .eq("id", input.clientId)
+          .lte("next_meeting_date", input.eventDate);
+      }
       return fetchSnapshot();
     },
 
@@ -488,6 +501,10 @@ export function createSupabaseAdapter(): DataAdapter {
       if (patch.heldAway !== undefined) row.held_away = patch.heldAway;
       if (patch.heldAwayNote !== undefined) row.held_away_note = patch.heldAwayNote?.trim() || null;
       if (patch.tags !== undefined) row.tags = patch.tags;
+      if (patch.nextMeetingDate !== undefined) row.next_meeting_date = patch.nextMeetingDate;
+      if (patch.nextMeetingNote !== undefined) {
+        row.next_meeting_note = patch.nextMeetingNote?.trim() || null;
+      }
 
       const { error } = await db.from("clients").update(row).eq("id", clientId);
       if (error) throw new Error(`Updating client: ${error.message}`);

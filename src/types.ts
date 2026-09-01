@@ -65,6 +65,14 @@ export interface Client {
   familyRole: FamilyRole | null;
   /** Opportunity tags (Roth conversion, side fund…). Searchable and filterable. */
   tags: ClientTag[];
+  /**
+   * A booked upcoming meeting. It keeps the meeting off the queue until that
+   * day (so the app stops asking for something already on the calendar), but
+   * it is never a completed touch: the service score only moves when the
+   * meeting actually happens and gets logged.
+   */
+  nextMeetingDate: string | null;
+  nextMeetingNote: string | null;
   createdAt: string;
 }
 
@@ -254,6 +262,8 @@ export interface UpdateClientInput {
   familyId?: string | null;
   familyRole?: FamilyRole | null;
   tags?: ClientTag[];
+  nextMeetingDate?: string | null;
+  nextMeetingNote?: string | null;
 }
 
 export const FAMILY_ROLE_LABELS: Record<FamilyRole, string> = {

@@ -156,6 +156,8 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
       familyId: null,
       familyRole: null,
       tags: DEMO_TAGS[spec.name] ?? [],
+      nextMeetingDate: null,
+      nextMeetingNote: null,
       createdAt: `${addDays(today, oldest)}T09:00:00.000Z`,
     });
 

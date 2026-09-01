@@ -23,6 +23,8 @@ function mkClient(o: Partial<Client> = {}): Client {
     familyId: null,
     familyRole: null,
     tags: [],
+    nextMeetingDate: null,
+    nextMeetingNote: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     ...o,
   };
