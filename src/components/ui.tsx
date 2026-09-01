@@ -1,6 +1,7 @@
 // Small UI kit: button, modal, form fields, segmented control.
 
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { createPortal } from "react-dom";
 import { XIcon } from "./icons";
 
 // ---------------------------------------------------------------------------
@@ -63,7 +64,13 @@ export function Modal({ open, onClose, title, subtitle, children, wide }: ModalP
 
   if (!open) return null;
 
-  return (
+  // Rendered on <body> rather than in place. Every screen's root carries the
+  // `animate-rise` animation, which leaves a transform behind — and a
+  // transformed ancestor becomes the containing block for `position: fixed`.
+  // In place, the overlay would size itself to the whole page instead of the
+  // window, pushing tall dialogs (Edit, Plan outreach, …) off the bottom of
+  // the screen with no way to reach their buttons.
+  return createPortal(
     <div className="fixed inset-0 z-40 flex items-end justify-center p-0 sm:items-center sm:p-6">
       <div className="animate-fade fixed inset-0 bg-ink/40 backdrop-blur-[2px]" onClick={onClose} />
       {/*
@@ -99,7 +106,8 @@ export function Modal({ open, onClose, title, subtitle, children, wide }: ModalP
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
