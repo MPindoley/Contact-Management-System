@@ -64,30 +64,40 @@ export function Modal({ open, onClose, title, subtitle, children, wide }: ModalP
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto p-0 sm:items-start sm:p-8">
+    <div className="fixed inset-0 z-40 flex items-end justify-center p-0 sm:items-center sm:p-6">
       <div className="animate-fade fixed inset-0 bg-ink/40 backdrop-blur-[2px]" onClick={onClose} />
+      {/*
+        The panel is capped to the viewport and scrolls INSIDE itself, so a
+        short window (or a laptop with the browser half-height) can always
+        reach the form and its buttons. Relying on the overlay to scroll
+        stranded the bottom of tall dialogs — the wheel never reached it.
+      */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`animate-rise relative max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-lift sm:my-auto sm:max-h-none sm:rounded-2xl sm:p-6 sm:pb-6 ${wide ? "sm:max-w-2xl" : "sm:max-w-lg"}`}
+        className={`animate-rise relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-lift sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-lg"}`}
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 sm:hidden" />
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">{title}</h2>
-            {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
+        <div className="shrink-0 px-5 pt-4 sm:px-6 sm:pt-6">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 sm:hidden" />
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold">{title}</h2>
+              {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="shrink-0 cursor-pointer rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-ink"
+            >
+              <XIcon className="size-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="cursor-pointer rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-ink"
-          >
-            <XIcon className="size-5" />
-          </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
+          {children}
+        </div>
       </div>
     </div>
   );
