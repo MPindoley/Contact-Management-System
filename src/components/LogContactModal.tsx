@@ -14,6 +14,8 @@ import {
 import type { ContactType, TouchAuthor } from "../types";
 import { TOUCH_AUTHOR_LABELS, TOUCH_AUTHORS, CONTACT_TYPE_LABELS, authorForUser } from "../types";
 import { useApp } from "../lib/store";
+import { suggestFromNote } from "../lib/noteSuggestions";
+import { CLIENT_TAG_LABELS, type ClientTag } from "../types";
 import { useToast } from "../lib/toast";
 import { addDays, formatMedium, todayISO } from "../lib/dates";
 import { Button, Field, Input, Modal, Segmented, Select, Spinner, Textarea } from "./ui";
@@ -84,7 +86,8 @@ const TRY_AGAIN_OPTIONS = [
 ];
 
 function LogContactForm({ initialClientId, onClose }: { initialClientId: string | null; onClose: () => void }) {
-  const { data, currentUser, logContact, snoozeTouch, busy, today } = useApp();
+  const { data, currentUser, logContact, snoozeTouch, updateClient, scheduleMeeting, busy, today } =
+    useApp();
   const toast = useToast();
 
   const clients = useMemo(
@@ -104,6 +107,8 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   const [notes, setNotes] = useState("");
   // After leaving a voicemail: snooze the call this many days (0 = don't snooze).
   const [tryAgainDays, setTryAgainDays] = useState(3);
+  // Suggestions the advisor has waved off for this note.
+  const [declined, setDeclined] = useState<Set<string>>(new Set());
 
   const selected = clients.find((c) => c.id === clientId) ?? null;
 
@@ -118,6 +123,28 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
       setAdvisor(authorForUser(currentUser));
     }
   }, [selected, currentUser]);
+
+  // What the note implies: opportunity tags, and when to see them next.
+  // Nothing leaves the browser — this is keyword matching over the firm's own
+  // tag list, so it is instant and always says the same thing.
+  const suggestions = useMemo(
+    () =>
+      selected
+        ? suggestFromNote(notes, selected.tags, today)
+        : { tags: [] as ClientTag[], meetingDate: null, meetingPhrase: null },
+    [notes, selected, today],
+  );
+  const keptTags = suggestions.tags.filter((t) => !declined.has(t));
+  const keepMeeting = Boolean(suggestions.meetingDate) && !declined.has("__meeting");
+
+  function toggleSuggestion(key: string) {
+    setDeclined((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -156,6 +183,24 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
             : `${CONTACT_TYPE_LABELS[type]} logged.`,
         );
       }
+
+      // Everything the advisor kept from the note. Done after the log so the
+      // booking survives (logging a meeting clears one already due).
+      if (keptTags.length > 0) {
+        await updateClient(selected.id, { tags: [...selected.tags, ...keptTags] });
+      }
+      if (keepMeeting && suggestions.meetingDate) {
+        await scheduleMeeting(selected.id, suggestions.meetingDate, null);
+      }
+      const extras: string[] = [];
+      if (keptTags.length > 0) {
+        extras.push(`tagged ${keptTags.map((t) => CLIENT_TAG_LABELS[t]).join(", ")}`);
+      }
+      if (keepMeeting && suggestions.meetingDate) {
+        extras.push(`booked ${formatMedium(suggestions.meetingDate)}`);
+      }
+      if (extras.length > 0) toast.push(`Also ${extras.join(" · ")}.`, "info");
+
       onClose();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Something went wrong logging the contact.", "error");
@@ -335,12 +380,58 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
 
         <Field label="Notes (optional)">
           <Textarea
-            rows={2}
+            rows={3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="What mattered in this touch?"
+            placeholder="What mattered in this touch? Tap your mic and just talk."
           />
         </Field>
+
+        {selected && (suggestions.tags.length > 0 || suggestions.meetingDate) && (
+          <div className="animate-rise rounded-xl border border-pine-200 bg-pine-50/70 p-3">
+            <p className="text-xs font-semibold tracking-wide text-pine-900 uppercase">
+              From what you said
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {suggestions.tags.map((t) => {
+                const on = !declined.has(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleSuggestion(t)}
+                    className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                      on
+                        ? "border-pine-600 bg-pine-700 text-white"
+                        : "border-stone-300 bg-white text-ink-soft hover:bg-stone-50"
+                    }`}
+                  >
+                    {on ? "✓ " : "+ "}
+                    {CLIENT_TAG_LABELS[t]}
+                  </button>
+                );
+              })}
+              {suggestions.meetingDate && (
+                <button
+                  type="button"
+                  onClick={() => toggleSuggestion("__meeting")}
+                  className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    keepMeeting
+                      ? "border-pine-600 bg-pine-700 text-white"
+                      : "border-stone-300 bg-white text-ink-soft hover:bg-stone-50"
+                  }`}
+                >
+                  {keepMeeting ? "✓ " : "+ "}
+                  Book {formatMedium(suggestions.meetingDate)}
+                </button>
+              )}
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-pine-900/70">
+              Tap any to drop it — nothing is saved until you log the contact.
+              {suggestions.meetingPhrase ? ` Heard \u201c${suggestions.meetingPhrase}\u201d.` : ""}
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>

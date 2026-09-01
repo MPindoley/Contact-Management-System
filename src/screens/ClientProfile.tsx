@@ -2,7 +2,7 @@
 // touches, current due dates, health score, and the log button.
 
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { useLogContact } from "../components/LogContactModal";
 import { clientScore, modelFor } from "../engine/serviceEngine";
@@ -22,6 +22,7 @@ import { CalendarIcon, ClockIcon, PhoneIcon, PlusIcon, VoicemailIcon } from "../
 export function ClientProfile() {
   const { clientId } = useParams<{ clientId: string }>();
   const { data, today } = useApp();
+  const navigate = useNavigate();
   const { open } = useLogContact();
   const [editing, setEditing] = useState(false);
   const [editingEvent, setEditingEvent] = useState<ContactEvent | null>(null);
@@ -122,6 +123,7 @@ export function ClientProfile() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Button onClick={() => navigate(`/clients/${client.id}/prep`)}>Prep sheet</Button>
             <Button onClick={() => setEditing(true)}>Edit</Button>
             <Button variant="primary" onClick={() => open(client.id)}>
               <PlusIcon className="size-4" />
