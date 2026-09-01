@@ -102,6 +102,7 @@ describe("demo adapter — full service loop", () => {
       revenue: null,
       heldAway: false,
       heldAwayNote: null,
+      tags: [],
       lastMeetingDate: addDays(today, -10),
       lastCallDate: addDays(today, -35), // call overdue for Tier A (30d)
     });
@@ -196,6 +197,7 @@ describe("demo adapter — full service loop", () => {
       revenue: null,
       heldAway: false,
       heldAwayNote: null,
+      tags: [],
       lastMeetingDate: null,
       lastCallDate: null,
     });
@@ -204,5 +206,55 @@ describe("demo adapter — full service loop", () => {
     const second = createDemoAdapter(storage);
     const reloaded = await second.load();
     expect(reloaded.clients.some((c) => c.householdName === "Persisted Household")).toBe(true);
+  });
+});
+
+describe("booking an upcoming meeting", () => {
+  it("parks the meeting off the queue until the booked day, without crediting the score", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    const snap = await adapter.load();
+    const today = todayISO();
+    // A household whose meeting is already due/overdue.
+    const due = snap.dueDates.find((d) => d.type === "meeting" && d.dueDate <= today)!;
+    const clientId = due.clientId;
+    const meetingsBefore = snap.contactEvents.filter(
+      (e) => e.clientId === clientId && e.type === "meeting",
+    ).length;
+
+    const booked = addDays(today, 20);
+    let after = await adapter.updateClient(clientId, { nextMeetingDate: booked, nextMeetingNote: "Annual review" });
+    after = await adapter.snoozeTouch(clientId, "meeting", booked);
+
+    const client = after.clients.find((c) => c.id === clientId)!;
+    expect(client.nextMeetingDate).toBe(booked);
+    expect(client.nextMeetingNote).toBe("Annual review");
+    // Off the queue until then...
+    expect(after.tasks.some((t) => t.clientId === clientId && t.type === "meeting" && t.status === "open")).toBe(false);
+    // ...but never counted as a meeting that happened.
+    expect(after.contactEvents.filter((e) => e.clientId === clientId && e.type === "meeting").length).toBe(
+      meetingsBefore,
+    );
+  });
+
+  it("clears the booking once that meeting is logged, but keeps a later one", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    const snap = await adapter.load();
+    const today = todayISO();
+    const clientId = snap.clients[0].id;
+
+    // Booked for today, then logged today → the booking is done.
+    await adapter.updateClient(clientId, { nextMeetingDate: today, nextMeetingNote: "Review" });
+    let after = await adapter.logContact({
+      clientId, advisor: "matt", type: "meeting", eventDate: today, durationMinutes: 60, notes: null,
+    });
+    expect(after.clients.find((c) => c.id === clientId)!.nextMeetingDate).toBeNull();
+
+    // A booking further out is a different appointment — logging today keeps it.
+    const later = addDays(today, 45);
+    await adapter.updateClient(clientId, { nextMeetingDate: later, nextMeetingNote: "Next one" });
+    after = await adapter.logContact({
+      clientId, advisor: "matt", type: "meeting", eventDate: today, durationMinutes: 60, notes: null,
+    });
+    expect(after.clients.find((c) => c.id === clientId)!.nextMeetingDate).toBe(later);
   });
 });

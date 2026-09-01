@@ -147,7 +147,9 @@ export function Layout() {
         <div className="px-3">
           <LogContactButton />
         </div>
-        <nav className="flex-1 space-y-0.5 px-3">
+        {/* min-h-0 lets this shrink below its content so a short window can
+            still scroll the nav and keep the footer (sign out) reachable. */}
+        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
           {NAV.map(({ to, label, Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={navClass}>
               <Icon className="size-4.5 shrink-0" />

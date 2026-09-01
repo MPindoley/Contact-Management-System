@@ -7,9 +7,19 @@ import { useApp } from "../lib/store";
 import { latestContactFor, nextDueFor } from "../lib/selectors";
 import { clientScore } from "../engine/serviceEngine";
 import { outreachCandidates } from "../engine/outreach";
-import { ADVISOR_LABELS, TIERS, TIER_RANK, type AdvisorAssignment, type Tier } from "../types";
+import {
+  ADVISOR_LABELS,
+  CLIENT_TAGS,
+  CLIENT_TAG_LABELS,
+  TIERS,
+  TIER_RANK,
+  clientMatchesTagSearch,
+  type AdvisorAssignment,
+  type ClientTag,
+  type Tier,
+} from "../types";
 import { formatShort } from "../lib/dates";
-import { AdvisorChip, DuePhrase, ScorePill, TierBadge } from "../components/badges";
+import { AdvisorChip, DuePhrase, ScorePill, TagChip, TierBadge } from "../components/badges";
 import { ClientFormModal } from "../components/ClientFormModal";
 import { PlanOutreachModal } from "../components/PlanOutreachModal";
 import { LinkFamiliesModal } from "../components/LinkFamiliesModal";
@@ -62,6 +72,7 @@ export function Clients() {
     `${fk}:advisor`,
     () => currentUser?.advisorKey ?? "all",
   );
+  const [tagFilter, setTagFilter] = useStickyState<"all" | ClientTag>(`${fk}:tag`, "all");
   const [showInactive, setShowInactive] = useStickyState(`${fk}:inactive`, false);
   const [sort, setSort] = useStickyState<{ key: ClientSortKey; dir: 1 | -1 }>(`${fk}:sort`, {
     key: "household",
@@ -75,7 +86,15 @@ export function Clients() {
       .filter((c) => showInactive || c.active)
       .filter((c) => tierFilter === "all" || c.tier === tierFilter)
       .filter((c) => advisorFilter === "all" || c.assignedAdvisor === advisorFilter)
-      .filter((c) => !q || c.householdName.toLowerCase().includes(q))
+      .filter((c) => tagFilter === "all" || c.tags.includes(tagFilter))
+      // Search matches the household name *or* any of its opportunity tags, so
+      // typing "roth" pulls up every Roth-conversion household.
+      .filter(
+        (c) =>
+          !q ||
+          c.householdName.toLowerCase().includes(q) ||
+          clientMatchesTagSearch(c.tags, q),
+      )
       .map((client) => ({
         client,
         lastContact: latestContactFor(data.contactEvents, client.id),
@@ -92,7 +111,7 @@ export function Clients() {
       else primary = a.score - b.score;
       return (primary || byName(a, b)) * sort.dir;
     });
-  }, [data, search, tierFilter, advisorFilter, showInactive, today, sort]);
+  }, [data, search, tierFilter, advisorFilter, tagFilter, showInactive, today, sort]);
 
   const toggleSort = (key: ClientSortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
@@ -225,6 +244,20 @@ export function Clients() {
             </Select>
           </div>
         </div>
+        <div className="w-full sm:w-52">
+          <Select
+            value={tagFilter}
+            onChange={(e) => setTagFilter(e.target.value as "all" | ClientTag)}
+            aria-label="Filter by opportunity tag"
+          >
+            <option value="all">All opportunities</option>
+            {CLIENT_TAGS.map((t) => (
+              <option key={t} value={t}>
+                {CLIENT_TAG_LABELS[t]}
+              </option>
+            ))}
+          </Select>
+        </div>
         <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-soft select-none">
           <input
             type="checkbox"
@@ -273,6 +306,13 @@ export function Clients() {
                     <AdvisorChip advisor={client.assignedAdvisor} />
                     {nextDue && client.active && <DuePhrase dueDate={nextDue.dueDate} today={today} />}
                   </div>
+                  {client.tags.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {client.tags.map((t) => (
+                        <TagChip key={t} tag={t} />
+                      ))}
+                    </div>
+                  )}
                   <p className="tnum mt-1 text-xs text-stone-400">
                     Last contact: {lastContact ? formatShort(lastContact.eventDate) : "—"}
                   </p>
@@ -307,6 +347,13 @@ export function Clients() {
                     {!client.active && (
                       <span className="ml-2 rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-semibold text-stone-600 uppercase">
                         Inactive
+                      </span>
+                    )}
+                    {client.tags.length > 0 && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {client.tags.map((t) => (
+                          <TagChip key={t} tag={t} />
+                        ))}
                       </span>
                     )}
                   </td>

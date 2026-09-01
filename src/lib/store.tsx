@@ -70,6 +70,9 @@ interface AppContextValue {
   snoozeTouch(clientId: string, type: TouchType, untilDate: string | null): Promise<void>;
   planOutreach(items: Array<{ clientId: string; dueDate: string }>): Promise<void>;
   updateClient(clientId: string, patch: UpdateClientInput): Promise<void>;
+  /** Book an upcoming meeting (keeps it off the queue until then). */
+  scheduleMeeting(clientId: string, date: string, note: string | null): Promise<void>;
+  clearScheduledMeeting(clientId: string): Promise<void>;
   deleteClient(clientId: string): Promise<void>;
   linkFamily(
     clientIds: string[],
@@ -357,6 +360,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  // Booking a meeting records it on the household AND parks the meeting touch
+  // until that day, reusing the same overlay the snooze button uses. It is
+  // never a completed touch, so the service score is untouched until the
+  // meeting actually happens and is logged.
+  const scheduleMeeting = useCallback(
+    async (clientId: string, date: string, note: string | null) => {
+      await updateClient(clientId, { nextMeetingDate: date, nextMeetingNote: note });
+      await snoozeTouch(clientId, "meeting", date);
+    },
+    [updateClient, snoozeTouch],
+  );
+
+  const clearScheduledMeeting = useCallback(
+    async (clientId: string) => {
+      await updateClient(clientId, { nextMeetingDate: null, nextMeetingNote: null });
+      await snoozeTouch(clientId, "meeting", null);
+    },
+    [updateClient, snoozeTouch],
+  );
+
   const deleteClient = useCallback(
     (clientId: string) => run(() => adapter.deleteClient(clientId)),
     [adapter, run],
@@ -463,6 +486,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       snoozeTouch,
       planOutreach,
       updateClient,
+      scheduleMeeting,
+      clearScheduledMeeting,
       deleteClient,
       linkFamily,
       unlinkFromFamily,
@@ -483,7 +508,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       mode, authReady, currentUser, signInDemo, signInSupabase, signUpSupabase, signOut,
       data, loading, busy, error, today, refresh,
       logContact, addClient, importClients, updateContactEvent, deleteContactEvent, snoozeTouch,
-      planOutreach, updateClient, deleteClient,
+      planOutreach, updateClient, scheduleMeeting, clearScheduledMeeting, deleteClient,
       linkFamily, unlinkFromFamily, renameFamily, autoLinkBySurname, updateServiceModel,
       addProspect, updateProspect, deleteProspect, logProspectContact, deleteProspectEvent,
       rebuildQueue, adminResetPassword, resetDemo,

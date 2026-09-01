@@ -175,6 +175,15 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         s.snapshot.tasks = settleTasks(s.snapshot.tasks, event.clientId, event.type as "meeting" | "call");
         recomputeClient(event.clientId);
       }
+      // A booked meeting that has now happened is no longer upcoming. A booking
+      // further out (a different appointment) is left alone.
+      if (event.type === "meeting") {
+        const client = s.snapshot.clients.find((c) => c.id === event.clientId);
+        if (client?.nextMeetingDate && client.nextMeetingDate <= event.eventDate) {
+          client.nextMeetingDate = null;
+          client.nextMeetingNote = null;
+        }
+      }
       rebuild(todayISO());
       return snapshot();
     },
@@ -195,6 +204,9 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         heldAwayNote: input.heldAwayNote?.trim() || null,
         familyId: null,
         familyRole: null,
+        tags: input.tags ?? [],
+        nextMeetingDate: null,
+        nextMeetingNote: null,
         createdAt: now,
       };
       s.snapshot.clients.push(client);
@@ -241,6 +253,9 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
           heldAwayNote: input.heldAwayNote?.trim() || null,
           familyId: null,
           familyRole: null,
+          tags: input.tags ?? [],
+          nextMeetingDate: null,
+          nextMeetingNote: null,
           createdAt: now,
         };
         s.snapshot.clients.push(client);
@@ -362,6 +377,11 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         if (patch.familyRole !== undefined) client.familyRole = patch.familyRole;
         if (patch.heldAway !== undefined) client.heldAway = patch.heldAway;
         if (patch.heldAwayNote !== undefined) client.heldAwayNote = patch.heldAwayNote?.trim() || null;
+        if (patch.tags !== undefined) client.tags = patch.tags;
+        if (patch.nextMeetingDate !== undefined) client.nextMeetingDate = patch.nextMeetingDate;
+        if (patch.nextMeetingNote !== undefined) {
+          client.nextMeetingNote = patch.nextMeetingNote?.trim() || null;
+        }
         if (tierChanged) recomputeClient(clientId);
         rebuild(todayISO());
       }

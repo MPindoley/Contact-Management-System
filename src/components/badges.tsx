@@ -1,7 +1,7 @@
 // Domain badges: tier, advisor, contact type, priority, score.
 
-import type { AdvisorAssignment, ContactType, Priority, ProspectStatus, Tier } from "../types";
-import { ADVISOR_LABELS, CONTACT_TYPE_LABELS, PROSPECT_STATUS_LABELS } from "../types";
+import type { AdvisorAssignment, ClientTag, ContactType, Priority, ProspectStatus, Tier } from "../types";
+import { ADVISOR_LABELS, CLIENT_TAG_LABELS, CONTACT_TYPE_LABELS, PROSPECT_STATUS_LABELS } from "../types";
 import { scoreColor, type ScoreColor } from "../engine/serviceEngine";
 import { dueLabel } from "../lib/dates";
 import { CalendarIcon, ClipboardIcon, PhoneIcon, VoicemailIcon } from "./icons";
@@ -131,6 +131,15 @@ export function ProspectStatusBadge({ status }: { status: ProspectStatus }) {
 }
 
 /** Held-away assets / money due — "there's money out there to capture." */
+/** An opportunity tag on a household — Roth conversion, side fund, LTC… */
+export function TagChip({ tag }: { tag: ClientTag }) {
+  return (
+    <span className="inline-flex items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-800 ring-1 ring-indigo-200 ring-inset">
+      {CLIENT_TAG_LABELS[tag]}
+    </span>
+  );
+}
+
 export function HeldAwayBadge({ note }: { note?: string | null }) {
   return (
     <span

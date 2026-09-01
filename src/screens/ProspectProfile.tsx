@@ -106,6 +106,7 @@ export function ProspectProfile() {
         revenue: null,
         heldAway: false,
         heldAwayNote: null,
+        tags: [],
         lastMeetingDate: null,
         lastCallDate: null,
       });

@@ -4,12 +4,14 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { AdvisorAssignment, Client, Tier } from "../types";
-import { ADVISOR_LABELS, TIERS } from "../types";
+import type { AdvisorAssignment, Client, ClientTag, Tier } from "../types";
+import { ADVISOR_LABELS, CLIENT_TAGS, CLIENT_TAG_LABELS, TIERS } from "../types";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { todayISO } from "../lib/dates";
 import { annualRequired, modelFor } from "../engine/serviceEngine";
+import { TagChip } from "./badges";
+import { ChevronDownIcon, TagIcon } from "./icons";
 import { Button, Field, Input, Modal, Select, Spinner } from "./ui";
 
 interface ClientFormModalProps {
@@ -41,7 +43,12 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
   const [heldAwayNote, setHeldAwayNote] = useState(client?.heldAwayNote ?? "");
   const [lastMeeting, setLastMeeting] = useState(todayISO());
   const [lastCall, setLastCall] = useState(todayISO());
+  const [tags, setTags] = useState<ClientTag[]>(client?.tags ?? []);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const toggleTag = (tag: ClientTag) =>
+    setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
 
   async function remove() {
     if (!client) return;
@@ -74,6 +81,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           revenue: revNum,
           heldAway,
           heldAwayNote: heldAwayNote.trim() || null,
+          tags,
         });
         toast.push(
           tier !== client.tier
@@ -91,6 +99,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
           revenue: revNum,
           heldAway,
           heldAwayNote: heldAwayNote.trim() || null,
+          tags,
           lastMeetingDate: lastMeeting || null,
           lastCallDate: lastCall || null,
         });
@@ -162,6 +171,56 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
               onChange={(e) => setHeldAwayNote(e.target.value)}
               placeholder="e.g. ~$180k 401(k) at a former employer"
             />
+          )}
+        </div>
+
+        {/* Opportunity tags — collapsed by default so the form stays calm. */}
+        <div className="rounded-lg border border-stone-200">
+          <button
+            type="button"
+            onClick={() => setTagsOpen((v) => !v)}
+            aria-expanded={tagsOpen}
+            className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left"
+          >
+            <TagIcon className="size-4 shrink-0 text-indigo-600" />
+            <span className="min-w-0 flex-1 text-[13px] leading-snug">
+              <span className="font-medium text-ink">Opportunities</span>
+              <span className="block text-xs text-stone-400">
+                {tags.length > 0
+                  ? `${tags.length} tagged — searchable from the Clients list`
+                  : "Roth conversion, side fund, long-term care… tick any that apply"}
+              </span>
+            </span>
+            <ChevronDownIcon
+              className={`size-4 shrink-0 text-stone-400 transition-transform ${tagsOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {!tagsOpen && tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-3 pb-2.5">
+              {tags.map((t) => (
+                <TagChip key={t} tag={t} />
+              ))}
+            </div>
+          )}
+
+          {tagsOpen && (
+            <div className="grid gap-0.5 border-t border-stone-100 p-2 sm:grid-cols-2">
+              {CLIENT_TAGS.map((t) => (
+                <label
+                  key={t}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors select-none hover:bg-stone-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={tags.includes(t)}
+                    onChange={() => toggleTag(t)}
+                    className="size-4 shrink-0 cursor-pointer accent-indigo-600"
+                  />
+                  {CLIENT_TAG_LABELS[t]}
+                </label>
+              ))}
+            </div>
           )}
         </div>
 
