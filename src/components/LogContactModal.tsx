@@ -15,12 +15,13 @@ import type { ContactType, TouchAuthor } from "../types";
 import { TOUCH_AUTHOR_LABELS, TOUCH_AUTHORS, CONTACT_TYPE_LABELS, authorForUser } from "../types";
 import { useApp } from "../lib/store";
 import { suggestFromNote } from "../lib/noteSuggestions";
+import { otherHouseholdMembers } from "../lib/household";
 import { CLIENT_TAG_LABELS, type ClientTag } from "../types";
 import { useToast } from "../lib/toast";
 import { addDays, formatMedium, todayISO } from "../lib/dates";
 import { Button, Field, Input, Modal, Segmented, Select, Spinner, Textarea } from "./ui";
 import { TierBadge, AdvisorChip, HeldAwayBadge } from "./badges";
-import { CalendarIcon, ClipboardIcon, PhoneIcon, SearchIcon, VoicemailIcon } from "./icons";
+import { CalendarIcon, ClipboardIcon, PhoneIcon, SearchIcon, UsersIcon, VoicemailIcon } from "./icons";
 
 interface LogContactContextValue {
   open: (clientId?: string) => void;
@@ -109,8 +110,30 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   const [tryAgainDays, setTryAgainDays] = useState(3);
   // Suggestions the advisor has waved off for this note.
   const [declined, setDeclined] = useState<Set<string>>(new Set());
+  // Family members this touch should NOT count for. Empty by default: if you
+  // sat down with a household, you sat down with the household.
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
   const selected = clients.find((c) => c.id === clientId) ?? null;
+
+  // A joint review is one conversation with several households. Each keeps its
+  // own tier and its own clock, so each needs its own touch — otherwise the
+  // spouse you just spent an hour with still shows up overdue tomorrow.
+  const household = useMemo(
+    () => (selected ? otherHouseholdMembers(clients, selected) : []),
+    [clients, selected],
+  );
+  const family = selected?.familyId
+    ? (data?.families.find((f) => f.id === selected.familyId) ?? null)
+    : null;
+  const hiddenMembers = family?.hiddenMembers ?? 0;
+  const alsoForClientIds = household.filter((m) => !excluded.has(m.id)).map((m) => m.id);
+  const coveredCount = 1 + alsoForClientIds.length;
+
+  // Switching households starts everyone included again.
+  useEffect(() => {
+    setExcluded(new Set());
+  }, [clientId]);
 
   // Default the advisor to whoever owns the household (joint → current user).
   useEffect(() => {
@@ -137,6 +160,15 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   const keptTags = suggestions.tags.filter((t) => !declined.has(t));
   const keepMeeting = Boolean(suggestions.meetingDate) && !declined.has("__meeting");
 
+  function toggleHouseholdMember(id: string) {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function toggleSuggestion(key: string) {
     setDeclined((prev) => {
       const next = new Set(prev);
@@ -154,6 +186,12 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
 
   async function submit() {
     if (!selected) return;
+    // "for the Whitfields and 1 other household" reads better than a raw count
+    // and makes it obvious when the fan-out did more than you expected.
+    const covering =
+      alsoForClientIds.length > 0
+        ? ` for ${coveredCount} households`
+        : ` for ${selected.householdName}`;
     try {
       const dueDates = await logContact({
         clientId: selected.id,
@@ -162,35 +200,47 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
         eventDate: date,
         durationMinutes: duration.trim() === "" ? null : Math.max(0, Number(duration)),
         notes: notes.trim() || null,
+        alsoForClientIds,
       });
       if (type === "voicemail") {
         if (tryAgainDays > 0) {
-          await snoozeTouch(selected.id, "call", addDays(today, tryAgainDays));
+          // The whole household is still waiting to hear back, not just the
+          // number you happened to dial.
+          for (const id of [selected.id, ...alsoForClientIds]) {
+            await snoozeTouch(id, "call", addDays(today, tryAgainDays));
+          }
           toast.push(
-            `Voicemail logged — still on your list, back in ${tryAgainDays} ${tryAgainDays === 1 ? "day" : "days"} to try again.`,
+            `Voicemail logged${covering} — still on your list, back in ${tryAgainDays} ${tryAgainDays === 1 ? "day" : "days"} to try again.`,
             "info",
           );
         } else {
-          toast.push(`Voicemail logged for ${selected.householdName} — still due, clock unchanged.`, "info");
+          toast.push(`Voicemail logged${covering} — still due, clock unchanged.`, "info");
         }
       } else if (type === "admin") {
-        toast.push(`Admin touch logged for ${selected.householdName} — service clock unchanged.`, "info");
+        toast.push(`Admin touch logged${covering} — service clock unchanged.`, "info");
       } else {
         const next = dueDates.find((d) => d.type === type);
         toast.push(
           next
-            ? `${CONTACT_TYPE_LABELS[type]} logged — next ${type} due ${formatMedium(next.dueDate)}.`
-            : `${CONTACT_TYPE_LABELS[type]} logged.`,
+            ? `${CONTACT_TYPE_LABELS[type]} logged${covering} — next ${type} for ${selected.householdName} due ${formatMedium(next.dueDate)}.`
+            : `${CONTACT_TYPE_LABELS[type]} logged${covering}.`,
         );
       }
 
       // Everything the advisor kept from the note. Done after the log so the
       // booking survives (logging a meeting clears one already due).
+      //
+      // Tags stay on the household you picked — an opportunity belongs to
+      // somebody specific, and guessing which spouse owns the Roth would be
+      // worse than leaving it to a tap. The follow-up booking does fan out:
+      // "see them again in the fall" means the same appointment.
       if (keptTags.length > 0) {
         await updateClient(selected.id, { tags: [...selected.tags, ...keptTags] });
       }
       if (keepMeeting && suggestions.meetingDate) {
-        await scheduleMeeting(selected.id, suggestions.meetingDate, null);
+        for (const id of [selected.id, ...alsoForClientIds]) {
+          await scheduleMeeting(id, suggestions.meetingDate, null);
+        }
       }
       const extras: string[] = [];
       if (keptTags.length > 0) {
@@ -274,6 +324,50 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
             </div>
           )}
         </Field>
+
+        {selected && (household.length > 0 || hiddenMembers > 0) && (
+          <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+              <UsersIcon className="size-3.5 text-stone-400" />
+              Also counts for {family?.name ?? "the family"}
+            </p>
+            {household.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {household.map((m) => {
+                  const on = !excluded.has(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => toggleHouseholdMember(m.id)}
+                      aria-pressed={on}
+                      className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        on
+                          ? "border-pine-600 bg-pine-700 text-white"
+                          : "border-stone-300 bg-white text-ink-soft hover:bg-white"
+                      }`}
+                    >
+                      {on ? "✓ " : "+ "}
+                      {m.householdName}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-soft">
+              {alsoForClientIds.length > 0
+                ? "Each household keeps its own clock — this logs the same touch for each, so nobody in the family is left showing overdue."
+                : "Just this household. Tap a name to include them."}
+            </p>
+            {hiddenMembers > 0 && (
+              <p className="mt-1.5 text-[11px] leading-relaxed font-medium text-clay-800">
+                {hiddenMembers} more in this family {hiddenMembers === 1 ? "is" : "are"} in another
+                advisor's book — you can't log for {hiddenMembers === 1 ? "them" : "those"} from
+                here.
+              </p>
+            )}
+          </div>
+        )}
 
         <Field label="Type" group>
           <Segmented<ContactType>

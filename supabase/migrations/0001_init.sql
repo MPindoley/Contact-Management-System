@@ -113,11 +113,16 @@ create table contact_events (
   event_date       date not null default current_date,
   duration_minutes int check (duration_minutes is null or duration_minutes between 0 and 1440),
   notes            text,
+  -- One conversation covering several households in a family writes one row
+  -- per household -- each keeps its own clock -- and they share this id, so a
+  -- joint review can be counted once instead of N times.
+  group_id         uuid,
   created_at       timestamptz not null default now()
 );
 
 create index contact_events_client_idx on contact_events (client_id, type, event_date desc);
 create index contact_events_date_idx   on contact_events (event_date desc);
+create index contact_events_group_idx  on contact_events (group_id) where group_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- due_dates — computed, never set by hand. One row per client per touch type,
@@ -322,6 +327,19 @@ begin
   on conflict (client_id, type) do nothing;
   perform rebuild_tasks();
 end $$;
+
+-- Delete family rows that no longer have any members.
+--
+-- Security definer on purpose: it must count members across EVERY advisor's
+-- book. Counting them through the caller's own row-level security scope (which
+-- is what the app used to do) makes a family whose remaining members live in
+-- another book look empty -- and deleting it silently unlinks those
+-- households, because clients.family_id is `on delete set null`.
+create or replace function fn_prune_empty_families() returns void
+language sql security definer set search_path = public as $$
+  delete from families f
+  where not exists (select 1 from clients c where c.family_id = f.id);
+$$;
 
 -- Recompute everything (used after service model edits).
 create or replace function recompute_all(p_today date default current_date) returns void
@@ -529,6 +547,7 @@ create policy "scoped prospect events" on prospect_events for all to authenticat
 -- Base table privileges (the policies above still decide which rows are visible).
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant execute on function app_sees_all(), app_is_assistant(), app_advisor_key() to authenticated;
+grant execute on function fn_prune_empty_families() to authenticated;
 
 -- ============================================================================
 -- Realtime — broadcast row changes so every signed-in teammate's screen

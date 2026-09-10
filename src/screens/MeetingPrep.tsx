@@ -227,6 +227,7 @@ export function MeetingPrep() {
                   )}
                   <span className="ml-2 text-xs text-stone-400">
                     {TOUCH_AUTHOR_LABELS[e.advisor]}
+                    {e.groupId ? " · whole household" : ""}
                   </span>
                 </div>
               </li>

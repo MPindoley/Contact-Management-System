@@ -59,6 +59,7 @@ function mkEvent(clientId: string, overrides: Partial<ContactEvent> = {}): Conta
     eventDate: TODAY,
     durationMinutes: 20,
     notes: null,
+    groupId: null,
     createdAt: `${TODAY}T10:00:00.000Z`,
     ...overrides,
   };

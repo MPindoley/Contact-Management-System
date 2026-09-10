@@ -32,6 +32,7 @@ import {
 import { buildDemoSnapshot } from "./demoSeed";
 import { surnameOf } from "../importCsv";
 import { planSurnameLinks } from "../familyLink";
+import { planHouseholdCatchUp } from "../household";
 
 const STORAGE_KEY = "relationship-hub-demo-v1";
 
@@ -157,31 +158,47 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
 
     async logContact(input: LogContactInput) {
       const s = ensureLoaded();
-      const event: ContactEvent = {
-        id: uid(),
-        clientId: input.clientId,
-        advisor: input.advisor,
-        type: input.type,
-        eventDate: input.eventDate,
-        durationMinutes: input.durationMinutes,
-        notes: input.notes?.trim() || null,
-        createdAt: new Date().toISOString(),
-      };
-      s.snapshot.contactEvents.push(event);
-
-      if (isMeaningfulContact(event.type)) {
-        // A meaningful touch settles the matching open task and resets the clock.
-        // Voicemail / admin are tracked only — the task stays, the clock holds.
-        s.snapshot.tasks = settleTasks(s.snapshot.tasks, event.clientId, event.type as "meeting" | "call");
-        recomputeClient(event.clientId);
+      // One conversation, one row per household it covered. Each household's
+      // clock is its own, so they can't share a row — the group id is what ties
+      // them back together for reporting and for the history line.
+      const alsoIds = [...new Set(input.alsoForClientIds ?? [])].filter((id) => id !== input.clientId);
+      const clientIds = [input.clientId, ...alsoIds];
+      const missing = clientIds.filter((id) => !s.snapshot.clients.some((c) => c.id === id));
+      if (missing.length > 0) {
+        throw new Error("One of those households is no longer available — reload and try again.");
       }
-      // A booked meeting that has now happened is no longer upcoming. A booking
-      // further out (a different appointment) is left alone.
-      if (event.type === "meeting") {
-        const client = s.snapshot.clients.find((c) => c.id === event.clientId);
-        if (client?.nextMeetingDate && client.nextMeetingDate <= event.eventDate) {
-          client.nextMeetingDate = null;
-          client.nextMeetingNote = null;
+      const groupId = clientIds.length > 1 ? uid() : null;
+      const createdAt = new Date().toISOString();
+
+      for (const clientId of clientIds) {
+        const event: ContactEvent = {
+          id: uid(),
+          clientId,
+          advisor: input.advisor,
+          type: input.type,
+          eventDate: input.eventDate,
+          durationMinutes: input.durationMinutes,
+          notes: input.notes?.trim() || null,
+          groupId,
+          createdAt,
+        };
+        s.snapshot.contactEvents.push(event);
+
+        if (isMeaningfulContact(event.type)) {
+          // A meaningful touch settles the matching open task and resets the clock
+          // — each household by its OWN tier's interval. Voicemail / admin are
+          // tracked only: the task stays, the clock holds.
+          s.snapshot.tasks = settleTasks(s.snapshot.tasks, clientId, event.type as "meeting" | "call");
+          recomputeClient(clientId);
+        }
+        // A booked meeting that has now happened is no longer upcoming. A booking
+        // further out (a different appointment) is left alone.
+        if (event.type === "meeting") {
+          const client = s.snapshot.clients.find((c) => c.id === clientId);
+          if (client?.nextMeetingDate && client.nextMeetingDate <= event.eventDate) {
+            client.nextMeetingDate = null;
+            client.nextMeetingNote = null;
+          }
         }
       }
       rebuild(todayISO());
@@ -227,6 +244,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
           eventDate: date,
           durationMinutes: null,
           notes: "Logged while adding the household.",
+          groupId: null,
           createdAt: now,
         });
       }
@@ -275,6 +293,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
             eventDate: date,
             durationMinutes: null,
             notes: "Imported from CSV.",
+            groupId: null,
             createdAt: now,
           });
         }
@@ -438,6 +457,51 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       }
       cleanupFamilies();
       persist();
+      return snapshot();
+    },
+
+    async catchUpHousehold(clientId: string) {
+      const s = ensureLoaded();
+      const client = s.snapshot.clients.find((c) => c.id === clientId);
+      if (!client) return snapshot();
+
+      const plan = planHouseholdCatchUp(
+        s.snapshot.clients,
+        s.snapshot.contactEvents,
+        client,
+        todayISO(),
+      );
+      if (plan.length === 0) return snapshot();
+
+      const createdAt = new Date().toISOString();
+      const touched = new Set<string>();
+      for (const { source, missing } of plan) {
+        // The original joins the group it starts, so the report counts the
+        // conversation once rather than once per household.
+        const groupId = source.groupId ?? uid();
+        source.groupId = groupId;
+        for (const member of missing) {
+          s.snapshot.contactEvents.push({
+            id: uid(),
+            clientId: member.id,
+            advisor: source.advisor,
+            type: source.type,
+            eventDate: source.eventDate,
+            durationMinutes: source.durationMinutes,
+            notes: source.notes,
+            groupId,
+            createdAt,
+          });
+          touched.add(member.id);
+        }
+      }
+
+      // No settleTasks here, unlike logContact: this is backfilled history, not
+      // a task somebody just completed. Recompute rolls each member's clock
+      // forward from their newest touch and rebuild regenerates the queue from
+      // there, which is what clears the overdue rows this was meant to fix.
+      for (const id of touched) recomputeClient(id);
+      rebuild(todayISO());
       return snapshot();
     },
 

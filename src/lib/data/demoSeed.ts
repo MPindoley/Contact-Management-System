@@ -181,6 +181,7 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
         eventDate,
         durationMinutes: durations[type],
         notes: rand() < 0.6 ? pick(notesPool, rand) : null,
+        groupId: null,
         createdAt: `${eventDate}T16:00:00.000Z`,
       });
     };

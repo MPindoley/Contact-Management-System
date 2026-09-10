@@ -12,7 +12,14 @@ import {
   scoreColor,
 } from "../engine/serviceEngine";
 import { clientsById, openTasks } from "../lib/selectors";
-import { ADVISOR_LABELS, TIERS, type AdvisorAssignment, type Client, type Task } from "../types";
+import {
+  ADVISOR_LABELS,
+  TIERS,
+  type AdvisorAssignment,
+  type Client,
+  type ContactType,
+  type Task,
+} from "../types";
 import { formatLong, formatMonth, monthKey } from "../lib/dates";
 import { ScoreRing } from "../components/ScoreRing";
 import { SCORE_DOT_STYLES, AdvisorChip, TierBadge, TypeChip } from "../components/badges";
@@ -68,6 +75,13 @@ export function FirmReport() {
     const monthEvents = data.contactEvents.filter(
       (e) => e.type !== "admin" && monthKey(e.eventDate) === month && e.eventDate <= today,
     );
+    // Conversations held, not rows written: a joint review with a couple is one
+    // meeting logged against two households, and reading it as two meetings
+    // would quietly inflate the number the firm quotes at its own standup.
+    // (The pace panel below is deliberately different — it measures households
+    // served against households owed, so it counts every row.)
+    const conversations = (type: ContactType) =>
+      new Set(monthEvents.filter((e) => e.type === type).map((e) => e.groupId ?? e.id)).size;
 
     return {
       byId,
@@ -78,8 +92,8 @@ export function FirmReport() {
       overdueTasks,
       overdueClients: overdueClientIds.size,
       pace: monthlyProgress(data.clients, data.serviceModels, data.contactEvents, today),
-      monthMeetings: monthEvents.filter((e) => e.type === "meeting").length,
-      monthCalls: monthEvents.filter((e) => e.type === "call").length,
+      monthMeetings: conversations("meeting"),
+      monthCalls: conversations("call"),
     };
   }, [data, today]);
 
