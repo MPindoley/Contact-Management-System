@@ -48,6 +48,7 @@ describe("outreachCandidates", () => {
         eventDate: "2026-06-01",
         durationMinutes: null,
         notes: null,
+        groupId: null,
         createdAt: "2026-06-01T00:00:00Z",
       },
       // admin-only contact does NOT count as having been reached
@@ -59,6 +60,7 @@ describe("outreachCandidates", () => {
         eventDate: "2026-06-01",
         durationMinutes: null,
         notes: null,
+        groupId: null,
         createdAt: "2026-06-01T00:00:00Z",
       },
     ];
@@ -124,6 +126,7 @@ describe("planInitialOutreach", () => {
         eventDate: "2026-06-01",
         durationMinutes: null,
         notes: null,
+        groupId: null,
         createdAt: "2026-06-01T00:00:00Z",
       },
     ];

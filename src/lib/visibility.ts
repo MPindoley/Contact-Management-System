@@ -30,13 +30,28 @@ export function scopeSnapshot(snapshot: DataSnapshot, user: User): DataSnapshot 
   const prospects = snapshot.prospects.filter((p) => prospectVisibleTo(p, user));
   const prospectIds = new Set(prospects.map((p) => p.id));
 
+  // A family can span two books. Filtering it down to what this user may see
+  // must not make it *look* complete: an advisor who thinks a household has
+  // two members when it has three will log a joint meeting for two of them and
+  // believe the family is covered. Count what we removed and say so.
+  const hiddenPerFamily = new Map<string, number>();
+  for (const c of snapshot.clients) {
+    if (!c.familyId || clientIds.has(c.id) || !familyIds.has(c.familyId)) continue;
+    hiddenPerFamily.set(c.familyId, (hiddenPerFamily.get(c.familyId) ?? 0) + 1);
+  }
+
   return {
     ...snapshot,
     clients,
     contactEvents: snapshot.contactEvents.filter((e) => clientIds.has(e.clientId)),
     dueDates: snapshot.dueDates.filter((d) => clientIds.has(d.clientId)),
     tasks: snapshot.tasks.filter((t) => clientIds.has(t.clientId)),
-    families: snapshot.families.filter((f) => familyIds.has(f.id)),
+    families: snapshot.families
+      .filter((f) => familyIds.has(f.id))
+      .map((f) => {
+        const hidden = hiddenPerFamily.get(f.id) ?? 0;
+        return hidden > 0 ? { ...f, hiddenMembers: hidden } : f;
+      }),
     prospects,
     prospectEvents: snapshot.prospectEvents.filter((e) => prospectIds.has(e.prospectId)),
   };

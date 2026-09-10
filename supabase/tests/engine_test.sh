@@ -352,5 +352,83 @@ begin
   assert n = 0, 'prospects never leak into due_dates';
 end $$;
 
+-- --------------------------------------------------------------------------
+-- One conversation, several households: a joint review is logged as one row
+-- per household so each clock rolls forward by its OWN tier, and the rows
+-- share a group_id so the conversation can still be counted once.
+-- --------------------------------------------------------------------------
+insert into families (id, name)
+  values ('99999999-9999-9999-9999-000000000001', 'Harness Family');
+insert into clients (id, household_name, assigned_advisor, tier, family_id) values
+  ('99999999-9999-9999-9999-000000000010', 'Harness, Head',  'matt', 'S',
+   '99999999-9999-9999-9999-000000000001'),
+  ('99999999-9999-9999-9999-000000000011', 'Harness, Child', 'matt', 'C',
+   '99999999-9999-9999-9999-000000000001');
+
+insert into contact_events (client_id, advisor, type, event_date, group_id) values
+  ('99999999-9999-9999-9999-000000000010', 'matt', 'meeting', current_date,
+   'aaaa0000-0000-0000-0000-00000000000f'),
+  ('99999999-9999-9999-9999-000000000011', 'matt', 'meeting', current_date,
+   'aaaa0000-0000-0000-0000-00000000000f');
+
+do $$
+declare head_due date; child_due date; s_int int; c_int int; n int;
+begin
+  select meeting_interval_days into strict s_int from service_models where tier = 'S';
+  select meeting_interval_days into strict c_int from service_models where tier = 'C';
+  assert s_int <> c_int, 'fixture must use two different cadences';
+
+  select due_date into strict head_due from due_dates
+    where client_id = '99999999-9999-9999-9999-000000000010' and type = 'meeting';
+  select due_date into strict child_due from due_dates
+    where client_id = '99999999-9999-9999-9999-000000000011' and type = 'meeting';
+  assert head_due = current_date + s_int, 'head rolls by its own tier, got ' || head_due;
+  assert child_due = current_date + c_int, 'child rolls by its own tier, got ' || child_due;
+
+  -- Neither household is left with an open meeting task.
+  select count(*) into n from tasks
+    where client_id in ('99999999-9999-9999-9999-000000000010',
+                        '99999999-9999-9999-9999-000000000011')
+      and type = 'meeting' and status = 'open';
+  assert n = 0, 'both households settled, got ' || n;
+
+  -- Two rows, one conversation.
+  select count(distinct coalesce(group_id, id)) into n from contact_events
+    where client_id in ('99999999-9999-9999-9999-000000000010',
+                        '99999999-9999-9999-9999-000000000011');
+  assert n = 1, 'one conversation across the family, got ' || n;
+end $$;
+
+-- --------------------------------------------------------------------------
+-- fn_prune_empty_families counts members across EVERY book. The old
+-- client-side version counted them through the caller's own row-level
+-- security scope, so a family whose remaining members sat in another
+-- advisor's book looked empty and was deleted -- silently unlinking those
+-- households, because family_id is `on delete set null`.
+-- --------------------------------------------------------------------------
+insert into families (id, name)
+  values ('99999999-9999-9999-9999-000000000002', 'Only Beau Left');
+insert into clients (id, household_name, assigned_advisor, tier, family_id)
+  values ('99999999-9999-9999-9999-000000000020', 'Beau Household', 'advisor_b', 'B',
+          '99999999-9999-9999-9999-000000000002');
+insert into families (id, name)
+  values ('99999999-9999-9999-9999-000000000003', 'Genuinely Empty');
+
+select fn_prune_empty_families();
+
+do $$
+declare n int;
+begin
+  select count(*) into n from families where id = '99999999-9999-9999-9999-000000000002';
+  assert n = 1, 'a family with a member in another book survives';
+  select count(*) into n from clients
+    where id = '99999999-9999-9999-9999-000000000020'
+      and family_id = '99999999-9999-9999-9999-000000000002';
+  assert n = 1, 'and its member keeps the link';
+
+  select count(*) into n from families where id = '99999999-9999-9999-9999-000000000003';
+  assert n = 0, 'a family with no members anywhere is deleted';
+end $$;
+
 select 'ALL_SQL_ASSERTIONS_PASSED' as result;
 SQL

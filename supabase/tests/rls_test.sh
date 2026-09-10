@@ -95,4 +95,56 @@ begin
 end $$;
 SQL
 
+# --- A family spanning two books ------------------------------------------
+# Beau linking or unlinking anyone used to wipe out Matt's family grouping:
+# the app counted members through Beau's own scope (which cannot see Matt's
+# household) but deleted from `families`, whose policy is `using (true)`.
+# family_id is `on delete set null`, so Matt's households came apart silently.
+run <<'SQL'
+insert into families (id, name) values
+  ('f1111111-0000-0000-0000-000000000001', 'Shared Family'),
+  ('f1111111-0000-0000-0000-000000000002', 'Matt Only Family');
+update clients set family_id = 'f1111111-0000-0000-0000-000000000001'
+  where id in ('c1111111-0000-0000-0000-000000000001', 'c1111111-0000-0000-0000-000000000002');
+SQL
+
+run <<'SQL'
+set role authenticated;
+select set_config('test.uid', 'aaaaaaaa-0000-0000-0000-000000000002', false);  -- Beau
+do $$
+declare n int;
+begin
+  -- Beau sees the family, but only his own half of it.
+  select count(*) into n from clients where family_id = 'f1111111-0000-0000-0000-000000000001';
+  assert n = 1, 'Beau sees only his member of the shared family, got ' || n;
+
+  -- Logging a touch onto Matt's household is refused outright, not silently
+  -- dropped: a "log it for the whole family" fan-out can never half-apply.
+  begin
+    insert into contact_events (client_id, advisor, type, event_date)
+      values ('c1111111-0000-0000-0000-000000000001', 'advisor_b', 'meeting', current_date);
+    assert false, 'Beau must not be able to log against Matt''s household';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+-- The tidy-up Beau's ordinary link/unlink runs.
+select fn_prune_empty_families();
+reset role;
+
+do $$
+declare n int;
+begin
+  select count(*) into n from families where id = 'f1111111-0000-0000-0000-000000000001';
+  assert n = 1, 'the shared family survives Beau''s tidy-up';
+  select count(*) into n from clients
+    where id = 'c1111111-0000-0000-0000-000000000001'
+      and family_id = 'f1111111-0000-0000-0000-000000000001';
+  assert n = 1, 'and Matt''s household keeps its family link';
+  -- A family with no members anywhere is still cleaned up.
+  select count(*) into n from families where id = 'f1111111-0000-0000-0000-000000000002';
+  assert n = 0, 'a genuinely empty family is deleted';
+end $$;
+SQL
+
 echo "ALL_RLS_ASSERTIONS_PASSED"

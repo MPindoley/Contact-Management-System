@@ -39,6 +39,9 @@ import type {
 } from "../../types";
 import type { DataAdapter } from "./adapter";
 import { surnameOf } from "../importCsv";
+import { uid } from "../../engine/serviceEngine";
+import { planHouseholdCatchUp } from "../household";
+import { todayISO } from "../dates";
 
 const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
@@ -131,6 +134,7 @@ interface ContactEventRow {
   event_date: string;
   duration_minutes: number | null;
   notes: string | null;
+  group_id: string | null;
   created_at: string;
 }
 interface DueDateRow {
@@ -199,6 +203,7 @@ const mapEvent = (r: ContactEventRow): ContactEvent => ({
   eventDate: r.event_date,
   durationMinutes: r.duration_minutes,
   notes: r.notes,
+  groupId: r.group_id ?? null,
   createdAt: r.created_at,
 });
 const mapDueDate = (r: DueDateRow): DueDate => ({
@@ -269,16 +274,38 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
   return result.data;
 }
 
+/**
+ * Row-level security speaks in Postgres. Nobody using a CRM should have to.
+ */
+function friendlyWriteError(message: string): string {
+  if (/row-level security|violates row-level/i.test(message)) {
+    return "that household is in another advisor's book. Ask them to log it.";
+  }
+  return message;
+}
+
 export function createSupabaseAdapter(): DataAdapter {
   const db = getSupabase();
 
-  /** Delete family rows that no longer have any members. */
+  /**
+   * Delete family rows that no longer have any members.
+   *
+   * Runs as a security-definer function so it counts members across every
+   * advisor's book. The old client-side version counted them through the
+   * *caller's* row-level security scope while deleting from an unscoped
+   * `families` table — so whenever a restricted advisor linked or unlinked
+   * anyone, every family whose remaining members lived in another book looked
+   * empty and was deleted, and `on delete set null` quietly unlinked those
+   * households. Neither advisor was ever told.
+   */
   async function pruneEmptyFamilies(): Promise<void> {
-    const fams = await db.from("families").select("id");
-    const used = await db.from("clients").select("family_id").not("family_id", "is", null);
-    const usedIds = new Set((used.data ?? []).map((r: { family_id: string | null }) => r.family_id));
-    const empty = (fams.data ?? []).map((r: { id: string }) => r.id).filter((id: string) => !usedIds.has(id));
-    if (empty.length > 0) await db.from("families").delete().in("id", empty);
+    const { error } = await db.rpc("fn_prune_empty_families");
+    // The function arrives with migration 0009. Until then, skip the tidy-up:
+    // an empty family row left lying around is harmless, and the old
+    // client-side version is the thing we are deliberately not doing.
+    if (error && !/does not exist|find the function|schema cache/i.test(error.message)) {
+      throw new Error(`Tidying families: ${error.message}`);
+    }
   }
 
   async function fetchSnapshot(): Promise<DataSnapshot> {
@@ -316,22 +343,40 @@ export function createSupabaseAdapter(): DataAdapter {
     load: fetchSnapshot,
 
     async logContact(input: LogContactInput) {
-      const { error } = await db.from("contact_events").insert({
-        client_id: input.clientId,
+      // One conversation, one row per household it covered — each household's
+      // clock is its own — tied together by a shared group id. A multi-row
+      // insert is a single statement, so it either all lands or none of it
+      // does; the family's clocks can never end up half-updated.
+      const alsoIds = [...new Set(input.alsoForClientIds ?? [])].filter((id) => id !== input.clientId);
+      const clientIds = [input.clientId, ...alsoIds];
+      const groupId = clientIds.length > 1 ? uid() : null;
+      const rows = clientIds.map((clientId) => ({
+        client_id: clientId,
         advisor: input.advisor,
         type: input.type,
         event_date: input.eventDate,
         duration_minutes: input.durationMinutes,
         notes: input.notes?.trim() || null,
-      });
-      if (error) throw new Error(`Logging contact: ${error.message}`);
+        group_id: groupId,
+      }));
+
+      const { data, error } = await db.from("contact_events").insert(rows).select("id");
+      if (error) throw new Error(`Logging contact: ${friendlyWriteError(error.message)}`);
+      // .select() above is not decoration: without it a write the database
+      // declined to apply comes back looking like a success.
+      if ((data?.length ?? 0) < rows.length) {
+        throw new Error(
+          "Part of that household is in another advisor's book — nothing was logged. Ask them to log it.",
+        );
+      }
+
       // A booked meeting that has now happened is no longer upcoming; a booking
       // further out (a different appointment) is left alone.
       if (input.type === "meeting") {
         await db
           .from("clients")
           .update({ next_meeting_date: null, next_meeting_note: null })
-          .eq("id", input.clientId)
+          .in("id", clientIds)
           .lte("next_meeting_date", input.eventDate);
       }
       return fetchSnapshot();
@@ -554,6 +599,56 @@ export function createSupabaseAdapter(): DataAdapter {
         .eq("id", clientId);
       if (error) throw new Error(`Unlinking family: ${error.message}`);
       await pruneEmptyFamilies();
+      return fetchSnapshot();
+    },
+
+    async catchUpHousehold(clientId: string) {
+      // Read the family and the year of touches around it, then reuse the same
+      // planner the demo backend runs so both agree on what "missing" means.
+      const clients = unwrap<ClientRow[]>(
+        await db.from("clients").select("*").order("household_name"),
+        "Loading households",
+      ).map(mapClient);
+      const client = clients.find((c) => c.id === clientId);
+      if (!client?.familyId) return fetchSnapshot();
+
+      const familyIds = clients.filter((c) => c.familyId === client.familyId).map((c) => c.id);
+      const events = unwrap<ContactEventRow[]>(
+        await db.from("contact_events").select("*").in("client_id", familyIds).limit(5000),
+        "Loading contact history",
+      ).map(mapEvent);
+
+      const plan = planHouseholdCatchUp(clients, events, client, todayISO());
+      if (plan.length === 0) return fetchSnapshot();
+
+      const rows: Array<Record<string, unknown>> = [];
+      const stamps: Array<{ id: string; group_id: string }> = [];
+      for (const { source, missing } of plan) {
+        // The original joins the group it starts, so the report counts the
+        // conversation once rather than once per household.
+        const groupId = source.groupId ?? uid();
+        if (!source.groupId) stamps.push({ id: source.id, group_id: groupId });
+        for (const member of missing) {
+          rows.push({
+            client_id: member.id,
+            advisor: source.advisor,
+            type: source.type,
+            event_date: source.eventDate,
+            duration_minutes: source.durationMinutes,
+            notes: source.notes,
+            group_id: groupId,
+          });
+        }
+      }
+
+      const { data, error } = await db.from("contact_events").insert(rows).select("id");
+      if (error) throw new Error(`Catching the family up: ${friendlyWriteError(error.message)}`);
+      if ((data?.length ?? 0) < rows.length) {
+        throw new Error("Part of that family is in another advisor's book — nothing was copied.");
+      }
+      for (const stamp of stamps) {
+        await db.from("contact_events").update({ group_id: stamp.group_id }).eq("id", stamp.id);
+      }
       return fetchSnapshot();
     },
 

@@ -57,8 +57,8 @@ describe("scopeSnapshot", () => {
     clients: [mattClient, beauClient],
     serviceModels: [],
     contactEvents: [
-      { id: "e1", clientId: "cm", advisor: "matt", type: "call", eventDate: "2026-06-01", durationMinutes: null, notes: null, createdAt: "" },
-      { id: "e2", clientId: "cb", advisor: "advisor_b", type: "call", eventDate: "2026-06-01", durationMinutes: null, notes: null, createdAt: "" },
+      { id: "e1", clientId: "cm", advisor: "matt", type: "call", eventDate: "2026-06-01", durationMinutes: null, notes: null, groupId: null, createdAt: "" },
+      { id: "e2", clientId: "cb", advisor: "advisor_b", type: "call", eventDate: "2026-06-01", durationMinutes: null, notes: null, groupId: null, createdAt: "" },
     ],
     dueDates: [
       { id: "d1", clientId: "cm", type: "call", dueDate: "2026-07-01", computedFromEventId: null, snoozedUntil: null, updatedAt: "" },
@@ -97,5 +97,34 @@ describe("scopeSnapshot", () => {
     const scoped = scopeSnapshot(snapshot, carolyn);
     expect(scoped.clients).toHaveLength(2);
     expect(scoped.prospects).toHaveLength(2);
+  });
+
+  // A family can be linked across two books. Beau must not be shown a family
+  // that looks whole when it isn't: he'd log a joint meeting for the members he
+  // can see and believe the household was covered.
+  describe("a family that spans two books", () => {
+    const mine = mkClient({ id: "cb2", assignedAdvisor: "advisor_b", familyId: "fam-x" });
+    const theirs = mkClient({ id: "cm2", assignedAdvisor: "matt", familyId: "fam-x" });
+    const mixed: DataSnapshot = {
+      ...snapshot,
+      clients: [mine, theirs],
+      contactEvents: [],
+      dueDates: [],
+      tasks: [],
+      families: [{ id: "fam-x", name: "Shared Family", createdAt: "" }],
+    };
+
+    it("keeps the family but says how many members are hidden", () => {
+      const scoped = scopeSnapshot(mixed, beau);
+      expect(scoped.clients.map((c) => c.id)).toEqual(["cb2"]);
+      expect(scoped.families).toHaveLength(1);
+      expect(scoped.families[0].hiddenMembers).toBe(1);
+    });
+
+    it("says nothing when the whole family is visible", () => {
+      const scoped = scopeSnapshot(mixed, matt);
+      expect(scoped.clients).toHaveLength(2);
+      expect(scoped.families[0].hiddenMembers).toBeUndefined();
+    });
   });
 });

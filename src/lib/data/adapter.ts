@@ -60,6 +60,13 @@ export interface DataAdapter {
     roles?: Record<string, FamilyRole>,
   ): Promise<DataSnapshot>;
   unlinkFromFamily(clientId: string): Promise<DataSnapshot>;
+  /**
+   * Copy this household's meetings and calls from the last year onto the family
+   * members that don't have them — the backlog left by joint meetings logged
+   * against one spouse only. Skips anything a member already has on that date,
+   * so it is safe to press twice.
+   */
+  catchUpHousehold(clientId: string): Promise<DataSnapshot>;
   renameFamily(familyId: string, name: string): Promise<DataSnapshot>;
   /**
    * Group un-familied households that share a surname *and* a book into

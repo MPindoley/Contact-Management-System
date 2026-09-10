@@ -80,6 +80,12 @@ export interface Family {
   id: string;
   name: string;
   createdAt: string;
+  /**
+   * Members sitting in another advisor's book, invisible to the current user.
+   * Set by scopeSnapshot so a family that has been narrowed down never renders
+   * as though it were complete. Undefined means none were hidden.
+   */
+  hiddenMembers?: number;
 }
 
 export interface ServiceModel {
@@ -99,6 +105,12 @@ export interface ContactEvent {
   eventDate: string;
   durationMinutes: number | null;
   notes: string | null;
+  /**
+   * One conversation covering several households in a family gets one row per
+   * household — their service clocks are separate — and they all share this id.
+   * Null for an ordinary single-household touch.
+   */
+  groupId: string | null;
   createdAt: string;
 }
 
@@ -225,6 +237,12 @@ export interface LogContactInput {
   eventDate: string;
   durationMinutes: number | null;
   notes: string | null;
+  /**
+   * Other households in the same family this touch also covers — a joint
+   * review is one meeting, but each household keeps its own clock, so each
+   * gets its own event row tied to the others by a shared group id.
+   */
+  alsoForClientIds?: string[];
 }
 
 export interface UpdateContactInput {

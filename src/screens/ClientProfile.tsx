@@ -201,6 +201,7 @@ export function ClientProfile() {
                             <p className="mt-0.5 text-xs text-stone-400">
                               {TOUCH_AUTHOR_LABELS[e.advisor]}
                               {e.durationMinutes ? ` · ${e.durationMinutes} min` : ""}
+                              {e.groupId ? " · whole household" : ""}
                             </p>
                           </div>
                           <button

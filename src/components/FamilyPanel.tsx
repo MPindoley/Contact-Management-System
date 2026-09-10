@@ -9,6 +9,7 @@ import { FAMILY_ROLES, FAMILY_ROLE_LABELS } from "../types";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { tierFromCriteria } from "../lib/importCsv";
+import { planHouseholdCatchUp } from "../lib/household";
 import { TierBadge } from "./badges";
 import { Button, Input, Select } from "./ui";
 import { SearchIcon, UsersIcon, XIcon } from "./icons";
@@ -21,11 +22,13 @@ function money(n: number | null): string {
 }
 
 export function FamilyPanel({ client }: { client: Client }) {
-  const { data, linkFamily, unlinkFromFamily, renameFamily, updateClient, busy } = useApp();
+  const { data, today, linkFamily, unlinkFromFamily, catchUpHousehold, renameFamily, updateClient, busy } =
+    useApp();
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [confirmingCatchUp, setConfirmingCatchUp] = useState(false);
 
   const family = data?.families.find((f) => f.id === client.familyId) ?? null;
   const members = useMemo(
@@ -44,6 +47,14 @@ export function FamilyPanel({ client }: { client: Client }) {
       data.serviceModels.map((m) => ({ tier: m.tier, minRevenue: m.minRevenue })),
     );
   }, [data, members, combined]);
+
+  // Touches this household has that the others don't — the backlog left by
+  // every joint meeting that was only ever logged against one spouse.
+  const catchUp = useMemo(
+    () => (data ? planHouseholdCatchUp(data.clients, data.contactEvents, client, today) : []),
+    [data, client, today],
+  );
+  const catchUpCopies = catchUp.reduce((n, item) => n + item.missing.length, 0);
 
   const candidates = useMemo(() => {
     if (!data) return [];
@@ -70,6 +81,18 @@ export function FamilyPanel({ client }: { client: Client }) {
       toast.push(`${client.householdName} linked with ${other.householdName}.`);
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Couldn't link the household.", "error");
+    }
+  }
+
+  async function runCatchUp() {
+    setConfirmingCatchUp(false);
+    try {
+      await catchUpHousehold(client.id);
+      toast.push(
+        `Copied ${catchUp.length} ${catchUp.length === 1 ? "touch" : "touches"} across the family — everyone's clock now reflects them.`,
+      );
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Couldn't catch the family up.", "error");
     }
   }
 
@@ -194,6 +217,46 @@ export function FamilyPanel({ client }: { client: Client }) {
           </li>
         ))}
       </ul>
+
+      {(family.hiddenMembers ?? 0) > 0 && (
+        <p className="mt-2 rounded-lg bg-clay-50 px-3 py-2 text-xs leading-relaxed font-medium text-clay-900">
+          {family.hiddenMembers} more in this family{" "}
+          {family.hiddenMembers === 1 ? "is" : "are"} in another advisor's book. Everything below
+          covers only the households you can see.
+        </p>
+      )}
+
+      {/* The backlog: joint meetings logged against one spouse only, which is
+          why the other one keeps showing up overdue. */}
+      {catchUp.length > 0 &&
+        (confirmingCatchUp ? (
+          <div className="mt-3 rounded-lg border border-pine-200 bg-pine-50 px-3 py-2.5">
+            <p className="text-[13px] leading-relaxed text-pine-900">
+              Copy {catchUp.length} {catchUp.length === 1 ? "touch" : "touches"} from{" "}
+              {client.householdName} onto the rest of the family — {catchUpCopies} new{" "}
+              {catchUpCopies === 1 ? "entry" : "entries"}. Each household's clock rolls forward by
+              its own tier, and anything already on their record is skipped.
+            </p>
+            <div className="mt-2 flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmingCatchUp(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="primary" disabled={busy} onClick={() => void runCatchUp()}>
+                Copy them
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-stone-200 px-3 py-2.5">
+            <span className="text-[13px] leading-snug text-ink-soft">
+              {catchUp.length} {catchUp.length === 1 ? "touch" : "touches"} here{" "}
+              {catchUp.length === 1 ? "isn't" : "aren't"} on the rest of the family.
+            </span>
+            <Button size="sm" disabled={busy} onClick={() => setConfirmingCatchUp(true)}>
+              Catch them up
+            </Button>
+          </div>
+        ))}
 
       <div className="mt-3 rounded-lg border border-stone-200 p-3">
         <div className="flex items-baseline justify-between">

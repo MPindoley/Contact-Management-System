@@ -258,3 +258,277 @@ describe("booking an upcoming meeting", () => {
     expect(after.clients.find((c) => c.id === clientId)!.nextMeetingDate).toBe(later);
   });
 });
+
+// A joint review is one conversation with several households. Each keeps its
+// own tier and its own clock, so each needs its own touch — otherwise the
+// spouse you just spent an hour with still shows up overdue tomorrow.
+describe("demo adapter — logging for the whole household", () => {
+  const base = {
+    assignedAdvisor: "matt" as const,
+    phone: null,
+    redtailId: null,
+    revenue: 500_000,
+    heldAway: false,
+    heldAwayNote: null,
+    tags: [],
+    lastMeetingDate: null,
+    lastCallDate: null,
+  };
+
+  /** A Tier S head and a Tier C child, deliberately NOT the same cadence. */
+  async function mixedTierFamily() {
+    const adapter = createDemoAdapter(memoryStorage());
+    await adapter.load();
+    const head = (await adapter.addClient({ ...base, householdName: "Kessler, Ann", tier: "S" }))
+      .clients.find((c) => c.householdName === "Kessler, Ann")!;
+    const child = (await adapter.addClient({ ...base, householdName: "Kessler, Ben", tier: "C" }))
+      .clients.find((c) => c.householdName === "Kessler, Ben")!;
+    await adapter.linkFamily([head.id, child.id], null, "Kessler Family");
+    return { adapter, head, child };
+  }
+
+  it("writes one event per household, all sharing the same conversation", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const today = todayISO();
+
+    const after = await adapter.logContact({
+      clientId: head.id,
+      advisor: "matt",
+      type: "meeting",
+      eventDate: today,
+      durationMinutes: 60,
+      notes: "Annual review, both of them at the table",
+      alsoForClientIds: [child.id],
+    });
+
+    const logged = after.contactEvents.filter(
+      (e) => e.eventDate === today && e.notes?.startsWith("Annual review"),
+    );
+    expect(logged.map((e) => e.clientId).sort()).toEqual([head.id, child.id].sort());
+    expect(logged.every((e) => e.type === "meeting" && e.durationMinutes === 60)).toBe(true);
+    // One conversation: same group id on both rows, and it is actually set.
+    const groups = new Set(logged.map((e) => e.groupId));
+    expect(groups.size).toBe(1);
+    expect([...groups][0]).toBeTruthy();
+  });
+
+  it("rolls each household forward by its OWN tier's interval", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const today = todayISO();
+
+    const after = await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "meeting", eventDate: today,
+      durationMinutes: 60, notes: null, alsoForClientIds: [child.id],
+    });
+
+    const interval = (tier: string) =>
+      after.serviceModels.find((m) => m.tier === tier)!.meetingIntervalDays;
+    const dueFor = (id: string) =>
+      after.dueDates.find((d) => d.clientId === id && d.type === "meeting")!.dueDate;
+
+    expect(interval("S")).not.toBe(interval("C")); // the fixture must stay mixed
+    expect(dueFor(head.id)).toBe(addDays(today, interval("S")));
+    expect(dueFor(child.id)).toBe(addDays(today, interval("C")));
+  });
+
+  it("settles the open task for every household, not just the one you picked", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const today = todayISO();
+
+    const after = await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "call", eventDate: today,
+      durationMinutes: 15, notes: null, alsoForClientIds: [child.id],
+    });
+
+    for (const id of [head.id, child.id]) {
+      expect(
+        after.tasks.some((t) => t.clientId === id && t.type === "call" && t.status === "open"),
+      ).toBe(false);
+    }
+  });
+
+  it("leaves every household outside the family exactly where it was", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const before = await adapter.load();
+    const outsiders = before.clients.filter((c) => c.id !== head.id && c.id !== child.id);
+    const fingerprint = (snap: typeof before) =>
+      outsiders
+        .flatMap((c) => snap.dueDates.filter((d) => d.clientId === c.id))
+        .map((d) => `${d.clientId}:${d.type}:${d.dueDate}`)
+        .sort();
+
+    const after = await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "meeting", eventDate: todayISO(),
+      durationMinutes: 60, notes: null, alsoForClientIds: [child.id],
+    });
+
+    expect(fingerprint(after)).toEqual(fingerprint(before));
+    expect(after.contactEvents.filter((e) => !outsiders.some((c) => c.id === e.clientId)).length)
+      .toBeGreaterThan(before.contactEvents.filter((e) => !outsiders.some((c) => c.id === e.clientId)).length);
+  });
+
+  it("moves only the one household when nothing is passed — the default is unchanged", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const before = await adapter.load();
+    const childDueBefore = before.dueDates
+      .filter((d) => d.clientId === child.id)
+      .map((d) => `${d.type}:${d.dueDate}`)
+      .sort();
+
+    const after = await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "meeting", eventDate: todayISO(),
+      durationMinutes: 60, notes: null,
+    });
+
+    expect(
+      after.dueDates.filter((d) => d.clientId === child.id).map((d) => `${d.type}:${d.dueDate}`).sort(),
+    ).toEqual(childDueBefore);
+    expect(after.contactEvents.filter((e) => e.clientId === child.id)).toHaveLength(0);
+    // A single-household touch belongs to no group.
+    expect(after.contactEvents.find((e) => e.clientId === head.id)!.groupId).toBeNull();
+  });
+
+  it("records an admin touch for everyone without moving anyone's clock", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const before = await adapter.load();
+    const dueBefore = before.dueDates
+      .filter((d) => d.clientId === head.id || d.clientId === child.id)
+      .map((d) => `${d.clientId}:${d.type}:${d.dueDate}`)
+      .sort();
+
+    const after = await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "admin", eventDate: todayISO(),
+      durationMinutes: 5, notes: null, alsoForClientIds: [child.id],
+    });
+
+    const family = [head.id, child.id];
+    expect(
+      after.contactEvents.filter((e) => e.type === "admin" && family.includes(e.clientId)),
+    ).toHaveLength(2);
+    expect(
+      after.dueDates
+        .filter((d) => d.clientId === head.id || d.clientId === child.id)
+        .map((d) => `${d.clientId}:${d.type}:${d.dueDate}`)
+        .sort(),
+    ).toEqual(dueBefore);
+  });
+
+  it("clears each household's booking on or before the day, and keeps later ones", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const today = todayISO();
+    const later = addDays(today, 45);
+    await adapter.updateClient(head.id, { nextMeetingDate: today, nextMeetingNote: "Joint review" });
+    await adapter.updateClient(child.id, { nextMeetingDate: later, nextMeetingNote: "His own" });
+
+    const after = await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "meeting", eventDate: today,
+      durationMinutes: 60, notes: null, alsoForClientIds: [child.id],
+    });
+
+    expect(after.clients.find((c) => c.id === head.id)!.nextMeetingDate).toBeNull();
+    expect(after.clients.find((c) => c.id === child.id)!.nextMeetingDate).toBe(later);
+  });
+
+  it("ignores a household passed twice, and the initiating one passed again", async () => {
+    const { adapter, head, child } = await mixedTierFamily();
+    const after = await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "call", eventDate: todayISO(),
+      durationMinutes: 10, notes: "dedupe", alsoForClientIds: [child.id, child.id, head.id],
+    });
+    expect(after.contactEvents.filter((e) => e.notes === "dedupe")).toHaveLength(2);
+  });
+
+  it("refuses rather than half-logging when a household has gone away", async () => {
+    const { adapter, head } = await mixedTierFamily();
+    await expect(
+      adapter.logContact({
+        clientId: head.id, advisor: "matt", type: "call", eventDate: todayISO(),
+        durationMinutes: 10, notes: null, alsoForClientIds: ["no-such-household"],
+      }),
+    ).rejects.toThrow(/no longer available/);
+  });
+});
+
+describe("demo adapter — catching a family up on past touches", () => {
+  const base = {
+    assignedAdvisor: "matt" as const,
+    phone: null,
+    redtailId: null,
+    revenue: 500_000,
+    heldAway: false,
+    heldAwayNote: null,
+    tags: [],
+    lastMeetingDate: null,
+    lastCallDate: null,
+  };
+
+  async function familyWithBacklog() {
+    const adapter = createDemoAdapter(memoryStorage());
+    await adapter.load();
+    const today = todayISO();
+    const head = (await adapter.addClient({ ...base, householdName: "Osei, Ruth", tier: "S" }))
+      .clients.find((c) => c.householdName === "Osei, Ruth")!;
+    const spouse = (await adapter.addClient({ ...base, householdName: "Osei, Sam", tier: "C" }))
+      .clients.find((c) => c.householdName === "Osei, Sam")!;
+    await adapter.linkFamily([head.id, spouse.id], null, "Osei Family");
+    // Two joint touches logged against Ruth only — the backlog this fixes.
+    await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "meeting",
+      eventDate: addDays(today, -60), durationMinutes: 60, notes: "Review", 
+    });
+    await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "call",
+      eventDate: addDays(today, -20), durationMinutes: 15, notes: "Check-in",
+    });
+    return { adapter, head, spouse, today };
+  }
+
+  it("copies the missing touches onto the rest of the family", async () => {
+    const { adapter, head, spouse } = await familyWithBacklog();
+    const after = await adapter.catchUpHousehold(head.id);
+
+    const his = after.contactEvents.filter((e) => e.clientId === spouse.id);
+    expect(his.map((e) => e.type).sort()).toEqual(["call", "meeting"]);
+    expect(his.map((e) => e.notes).sort()).toEqual(["Check-in", "Review"]);
+  });
+
+  it("ties each copy to the original, so one conversation counts once", async () => {
+    const { adapter, head, spouse } = await familyWithBacklog();
+    const after = await adapter.catchUpHousehold(head.id);
+
+    const family = [head.id, spouse.id];
+    for (const type of ["meeting", "call"] as const) {
+      const pair = after.contactEvents.filter(
+        (e) => e.type === type && family.includes(e.clientId),
+      );
+      expect(pair).toHaveLength(2);
+      expect(pair[0].groupId).toBeTruthy();
+      expect(pair[0].groupId).toBe(pair[1].groupId);
+    }
+
+  });
+
+  it("rolls the caught-up household forward by its own tier", async () => {
+    const { adapter, head, spouse, today } = await familyWithBacklog();
+    const after = await adapter.catchUpHousehold(head.id);
+
+    const interval = after.serviceModels.find((m) => m.tier === "C")!.callIntervalDays;
+    const due = after.dueDates.find((d) => d.clientId === spouse.id && d.type === "call")!;
+    expect(due.dueDate).toBe(addDays(addDays(today, -20), interval));
+  });
+
+  it("does nothing the second time — it is safe to press twice", async () => {
+    const { adapter, head } = await familyWithBacklog();
+    const once = await adapter.catchUpHousehold(head.id);
+    const twice = await adapter.catchUpHousehold(head.id);
+    expect(twice.contactEvents).toHaveLength(once.contactEvents.length);
+  });
+
+  it("does nothing for a household with no family", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    const before = await adapter.load();
+    const solo = before.clients.find((c) => !c.familyId)!;
+    const after = await adapter.catchUpHousehold(solo.id);
+    expect(after.contactEvents).toHaveLength(before.contactEvents.length);
+  });
+});

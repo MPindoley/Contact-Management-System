@@ -81,6 +81,8 @@ interface AppContextValue {
     roles?: Record<string, FamilyRole>,
   ): Promise<void>;
   unlinkFromFamily(clientId: string): Promise<void>;
+  /** Copy this household's last year of meetings/calls onto the rest of its family. */
+  catchUpHousehold(clientId: string): Promise<void>;
   renameFamily(familyId: string, name: string): Promise<void>;
   autoLinkBySurname(): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
@@ -395,6 +397,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  const catchUpHousehold = useCallback(
+    (clientId: string) => run(() => adapter.catchUpHousehold(clientId)),
+    [adapter, run],
+  );
+
   const unlinkFromFamily = useCallback(
     (clientId: string) => run(() => adapter.unlinkFromFamily(clientId)),
     [adapter, run],
@@ -491,6 +498,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteClient,
       linkFamily,
       unlinkFromFamily,
+      catchUpHousehold,
       renameFamily,
       autoLinkBySurname,
       updateServiceModel,
@@ -509,7 +517,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data, loading, busy, error, today, refresh,
       logContact, addClient, importClients, updateContactEvent, deleteContactEvent, snoozeTouch,
       planOutreach, updateClient, scheduleMeeting, clearScheduledMeeting, deleteClient,
-      linkFamily, unlinkFromFamily, renameFamily, autoLinkBySurname, updateServiceModel,
+      linkFamily, unlinkFromFamily, catchUpHousehold, renameFamily, autoLinkBySurname, updateServiceModel,
       addProspect, updateProspect, deleteProspect, logProspectContact, deleteProspectEvent,
       rebuildQueue, adminResetPassword, resetDemo,
     ],
