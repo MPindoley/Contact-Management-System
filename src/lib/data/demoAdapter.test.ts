@@ -532,3 +532,97 @@ describe("demo adapter — catching a family up on past touches", () => {
     expect(after.contactEvents).toHaveLength(before.contactEvents.length);
   });
 });
+
+// The standing rule: a family isn't always in the room together. A child or a
+// trust can sit in the family without inheriting the parents' meetings.
+describe("demo adapter — who a touch mirrors to", () => {
+  const base = {
+    assignedAdvisor: "matt" as const,
+    phone: null,
+    redtailId: null,
+    revenue: 500_000,
+    heldAway: false,
+    heldAwayNote: null,
+    tags: [],
+    lastMeetingDate: null,
+    lastCallDate: null,
+  };
+
+  async function familyOfThree() {
+    const adapter = createDemoAdapter(memoryStorage());
+    await adapter.load();
+    const add = async (householdName: string, tier: "S" | "C") =>
+      (await adapter.addClient({ ...base, householdName, tier })).clients.find(
+        (c) => c.householdName === householdName,
+      )!;
+    const head = await add("Ferrand, Luc", "S");
+    const spouse = await add("Ferrand, Noor", "S");
+    const child = await add("Ferrand, Theo", "C");
+    await adapter.linkFamily([head.id, spouse.id, child.id], null, "Ferrand Family");
+    return { adapter, head, spouse, child };
+  }
+
+  it("has every member mirroring until you say otherwise", async () => {
+    const { adapter } = await familyOfThree();
+    const snap = await adapter.load();
+    expect(snap.clients.every((c) => c.mirrorTouches)).toBe(true);
+  });
+
+  it("remembers the rule once it is turned off", async () => {
+    const { adapter, child } = await familyOfThree();
+    const after = await adapter.updateClient(child.id, { mirrorTouches: false });
+    expect(after.clients.find((c) => c.id === child.id)!.mirrorTouches).toBe(false);
+    // ...and back on again.
+    const back = await adapter.updateClient(child.id, { mirrorTouches: true });
+    expect(back.clients.find((c) => c.id === child.id)!.mirrorTouches).toBe(true);
+  });
+
+  it("is a default, not a lock — naming the member still logs for them", async () => {
+    // This is the point of storing it on the client rather than enforcing it in
+    // the adapter: "actually, Theo was there today" has to stay one tap.
+    const { adapter, head, child } = await familyOfThree();
+    await adapter.updateClient(child.id, { mirrorTouches: false });
+
+    const after = await adapter.logContact({
+      clientId: head.id,
+      advisor: "matt",
+      type: "meeting",
+      eventDate: todayISO(),
+      durationMinutes: 60,
+      notes: "Theo came along",
+      alsoForClientIds: [child.id],
+    });
+
+    expect(after.contactEvents.filter((e) => e.clientId === child.id)).toHaveLength(1);
+  });
+
+  it("leaves a non-mirroring member out of a catch-up", async () => {
+    const { adapter, head, spouse, child } = await familyOfThree();
+    const today = todayISO();
+    await adapter.updateClient(child.id, { mirrorTouches: false });
+    await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "meeting",
+      eventDate: addDays(today, -30), durationMinutes: 60, notes: "Just the parents",
+    });
+
+    const after = await adapter.catchUpHousehold(head.id);
+
+    expect(after.contactEvents.filter((e) => e.clientId === spouse.id)).toHaveLength(1);
+    expect(after.contactEvents.filter((e) => e.clientId === child.id)).toHaveLength(0);
+  });
+
+  it("catches nobody up when the whole rest of the family is ruled out", async () => {
+    const { adapter, head, spouse, child } = await familyOfThree();
+    const before = await adapter.load();
+    await adapter.updateClient(spouse.id, { mirrorTouches: false });
+    await adapter.updateClient(child.id, { mirrorTouches: false });
+    await adapter.logContact({
+      clientId: head.id, advisor: "matt", type: "call",
+      eventDate: addDays(todayISO(), -10), durationMinutes: 15, notes: null,
+    });
+
+    const after = await adapter.catchUpHousehold(head.id);
+    // Only the one call logged above — no copies anywhere.
+    expect(after.contactEvents.length).toBe(before.contactEvents.length + 1);
+  });
+});

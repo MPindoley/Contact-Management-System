@@ -109,6 +109,7 @@ interface ClientRow {
   held_away_note: string | null;
   family_id: string | null;
   family_role: FamilyRole | null;
+  mirror_touches: boolean | null;
   tags: ClientTag[] | null;
   next_meeting_date: string | null;
   next_meeting_note: string | null;
@@ -178,6 +179,9 @@ const mapClient = (r: ClientRow): Client => ({
   heldAwayNote: r.held_away_note,
   familyId: r.family_id ?? null,
   familyRole: r.family_role ?? null,
+  // Defaults true so a database still on 0009 reads as "everyone mirrors",
+  // which is exactly how it behaved before this column existed.
+  mirrorTouches: r.mirror_touches ?? true,
   tags: r.tags ?? [],
   nextMeetingDate: r.next_meeting_date ?? null,
   nextMeetingNote: r.next_meeting_note ?? null,
@@ -546,6 +550,7 @@ export function createSupabaseAdapter(): DataAdapter {
       if (patch.heldAway !== undefined) row.held_away = patch.heldAway;
       if (patch.heldAwayNote !== undefined) row.held_away_note = patch.heldAwayNote?.trim() || null;
       if (patch.tags !== undefined) row.tags = patch.tags;
+      if (patch.mirrorTouches !== undefined) row.mirror_touches = patch.mirrorTouches;
       if (patch.nextMeetingDate !== undefined) row.next_meeting_date = patch.nextMeetingDate;
       if (patch.nextMeetingNote !== undefined) {
         row.next_meeting_note = patch.nextMeetingNote?.trim() || null;

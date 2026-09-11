@@ -30,6 +30,20 @@ export function otherHouseholdMembers(clients: Client[], client: Client): Client
   return clients.filter((c) => c.familyId === client.familyId && c.id !== client.id && c.active);
 }
 
+/**
+ * The members a touch lands on unless you say otherwise — everyone whose
+ * standing rule is on.
+ *
+ * The rule exists because a family isn't always in the room together. A spouse
+ * usually is; a child, a trust, or an old account kept for one holding usually
+ * isn't, and resetting their clock off a meeting they never attended is a
+ * quiet lie about how well they're being served. Turning someone off here does
+ * not hide them from Log Contact — it just leaves them unticked.
+ */
+export function mirroringHouseholdMembers(clients: Client[], client: Client): Client[] {
+  return otherHouseholdMembers(clients, client).filter((c) => c.mirrorTouches);
+}
+
 /** How far back a catch-up reaches — the same year the profile and score use. */
 export const CATCH_UP_WINDOW_DAYS = 365;
 
@@ -50,7 +64,9 @@ export interface CatchUpItem {
  * Copying admin notes and voicemails across would add noise and fix nothing.
  *
  * A member already holding a touch of the same type on the same date is
- * skipped, so running this twice does nothing the second time.
+ * skipped, so running this twice does nothing the second time. So is anyone
+ * whose standing mirror rule is off — a bulk copy is the last place to
+ * override a rule you set deliberately.
  */
 export function planHouseholdCatchUp(
   clients: Client[],
@@ -58,7 +74,7 @@ export function planHouseholdCatchUp(
   client: Client,
   today: string,
 ): CatchUpItem[] {
-  const others = otherHouseholdMembers(clients, client);
+  const others = mirroringHouseholdMembers(clients, client);
   if (others.length === 0) return [];
 
   const windowStart = addDays(today, -CATCH_UP_WINDOW_DAYS);

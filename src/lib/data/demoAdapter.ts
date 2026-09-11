@@ -221,6 +221,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         heldAwayNote: input.heldAwayNote?.trim() || null,
         familyId: null,
         familyRole: null,
+        mirrorTouches: true,
         tags: input.tags ?? [],
         nextMeetingDate: null,
         nextMeetingNote: null,
@@ -271,6 +272,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
           heldAwayNote: input.heldAwayNote?.trim() || null,
           familyId: null,
           familyRole: null,
+          mirrorTouches: true,
           tags: input.tags ?? [],
           nextMeetingDate: null,
           nextMeetingNote: null,
@@ -397,6 +399,7 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
         if (patch.heldAway !== undefined) client.heldAway = patch.heldAway;
         if (patch.heldAwayNote !== undefined) client.heldAwayNote = patch.heldAwayNote?.trim() || null;
         if (patch.tags !== undefined) client.tags = patch.tags;
+        if (patch.mirrorTouches !== undefined) client.mirrorTouches = patch.mirrorTouches;
         if (patch.nextMeetingDate !== undefined) client.nextMeetingDate = patch.nextMeetingDate;
         if (patch.nextMeetingNote !== undefined) {
           client.nextMeetingNote = patch.nextMeetingNote?.trim() || null;

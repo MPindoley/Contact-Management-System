@@ -84,6 +84,21 @@ export function FamilyPanel({ client }: { client: Client }) {
     }
   }
 
+  async function toggleMirror(member: Client) {
+    const next = !member.mirrorTouches;
+    try {
+      await updateClient(member.id, { mirrorTouches: next });
+      toast.push(
+        next
+          ? `${member.householdName} will get touches logged for this family.`
+          : `${member.householdName} won't — log for them on their own profile.`,
+        "info",
+      );
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Couldn't change that.", "error");
+    }
+  }
+
   async function runCatchUp() {
     setConfirmingCatchUp(false);
     try {
@@ -182,41 +197,76 @@ export function FamilyPanel({ client }: { client: Client }) {
 
       <ul className="mt-3 space-y-2">
         {members.map((m) => (
-          <li key={m.id} className="flex items-center gap-2 rounded-lg bg-stone-50 px-2.5 py-2">
-            <TierBadge tier={m.tier} />
-            <div className="min-w-0 flex-1">
+          <li key={m.id} className="rounded-lg bg-stone-50 px-2.5 py-2">
+            {/* Name on its own line: household names are long and the panel
+                lives in a narrow column, so sharing a row makes both wrap. */}
+            <div className="flex items-center gap-2">
+              <TierBadge tier={m.tier} />
               {m.id === client.id ? (
-                <span className="text-[13px] font-semibold">{m.householdName}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+                  {m.householdName}
+                </span>
               ) : (
-                <Link to={`/clients/${m.id}`} className="text-[13px] font-semibold hover:underline">
+                <Link
+                  to={`/clients/${m.id}`}
+                  className="min-w-0 flex-1 truncate text-[13px] font-semibold hover:underline"
+                >
                   {m.householdName}
                 </Link>
               )}
-              <span className="block text-xs text-stone-400">{money(m.revenue)} AUM</span>
+              <button
+                type="button"
+                title="Remove from family"
+                onClick={() => void unlinkFromFamily(m.id)}
+                className="shrink-0 cursor-pointer rounded-md p-1 text-stone-400 hover:bg-stone-200 hover:text-clay-700"
+              >
+                <XIcon className="size-3.5" />
+              </button>
             </div>
-            <div className="w-28 shrink-0">
+
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="tnum shrink-0 text-xs text-stone-400">{money(m.revenue)} AUM</span>
+              {/* The select takes whatever room is left rather than holding a
+                  fixed width — this panel sits in a narrow column, and a rigid
+                  row here pushes straight out of the card. */}
               <Select
                 value={m.familyRole ?? "other"}
                 onChange={(e) => void updateClient(m.id, { familyRole: e.target.value as FamilyRole })}
-                className="py-1 text-xs"
+                className="ml-auto min-w-0 flex-1 py-0.5 text-xs"
                 aria-label={`Role for ${m.householdName}`}
               >
                 {FAMILY_ROLES.map((r) => (
                   <option key={r} value={r}>{FAMILY_ROLE_LABELS[r]}</option>
                 ))}
               </Select>
+              {/* The standing rule: does a touch logged for this family land on
+                  this household too? Off for the child or trust that isn't in
+                  the room. Log Contact still lists them, just unticked. */}
+              <label
+                className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-ink-soft select-none"
+                title={
+                  m.mirrorTouches
+                    ? `A touch logged for this family also counts for ${m.householdName}`
+                    : `Touches logged for this family skip ${m.householdName}`
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={m.mirrorTouches}
+                  disabled={busy}
+                  onChange={() => void toggleMirror(m)}
+                  className="size-3.5 cursor-pointer accent-pine-700"
+                />
+                Mirrors
+              </label>
             </div>
-            <button
-              type="button"
-              title="Remove from family"
-              onClick={() => void unlinkFromFamily(m.id)}
-              className="shrink-0 cursor-pointer rounded-md p-1 text-stone-400 hover:bg-stone-200 hover:text-clay-700"
-            >
-              <XIcon className="size-3.5" />
-            </button>
           </li>
         ))}
       </ul>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-stone-400">
+        “Mirrors” means a touch logged for this family also counts for that household. Untick
+        anyone who isn't usually in the room.
+      </p>
 
       {(family.hiddenMembers ?? 0) > 0 && (
         <p className="mt-2 rounded-lg bg-clay-50 px-3 py-2 text-xs leading-relaxed font-medium text-clay-900">

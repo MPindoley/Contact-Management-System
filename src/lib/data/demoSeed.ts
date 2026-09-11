@@ -154,6 +154,7 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
       heldAway: i % 5 === 0,
       heldAwayNote: i % 5 === 0 ? "~$180k 401(k) still at a previous custodian." : null,
       familyId: null,
+      mirrorTouches: true,
       familyRole: null,
       tags: DEMO_TAGS[spec.name] ?? [],
       nextMeetingDate: null,
