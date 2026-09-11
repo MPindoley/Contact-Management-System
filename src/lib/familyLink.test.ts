@@ -21,6 +21,7 @@ function client(
     heldAwayNote: null,
     familyId: null,
     familyRole: null,
+    mirrorTouches: true,
     tags: [],
     nextMeetingDate: null,
     nextMeetingNote: null,

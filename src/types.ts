@@ -63,6 +63,14 @@ export interface Client {
   /** Family link — multiple households grouped (spouses, parents, kids…). */
   familyId: string | null;
   familyRole: FamilyRole | null;
+  /**
+   * Does a touch logged for this family land on this household too? True for
+   * everyone by default. Turn it off for the member who genuinely isn't in the
+   * room -- a child, a trust, an old account kept for one holding -- so their
+   * clock isn't reset by a meeting they weren't at. A standing rule, not a
+   * lock: Log Contact still lists them, just switched off.
+   */
+  mirrorTouches: boolean;
   /** Opportunity tags (Roth conversion, side fund…). Searchable and filterable. */
   tags: ClientTag[];
   /**
@@ -279,6 +287,7 @@ export interface UpdateClientInput {
   heldAwayNote?: string | null;
   familyId?: string | null;
   familyRole?: FamilyRole | null;
+  mirrorTouches?: boolean;
   tags?: ClientTag[];
   nextMeetingDate?: string | null;
   nextMeetingNote?: string | null;

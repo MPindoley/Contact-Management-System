@@ -430,5 +430,40 @@ begin
   assert n = 0, 'a family with no members anywhere is deleted';
 end $$;
 
+-- --------------------------------------------------------------------------
+-- mirror_touches: a standing rule per member, defaulting to on so every
+-- household that existed before the column behaves exactly as it did.
+-- The engine never reads it -- the app decides who a touch is written for --
+-- so the only contract here is the column and its default.
+-- --------------------------------------------------------------------------
+do $$
+declare n int;
+begin
+  select count(*) into n from clients where mirror_touches is null;
+  assert n = 0, 'mirror_touches is never null, got ' || n;
+
+  select count(*) into n from clients where not mirror_touches;
+  assert n = 0, 'every existing household mirrors by default, got ' || n;
+end $$;
+
+insert into clients (id, household_name, assigned_advisor, tier, mirror_touches)
+  values ('99999999-9999-9999-9999-000000000030', 'Opted Out', 'matt', 'C', false);
+
+do $$
+declare m boolean;
+begin
+  select mirror_touches into strict m from clients
+    where id = '99999999-9999-9999-9999-000000000030';
+  assert m = false, 'the rule can be turned off';
+
+  -- Turning it off must not touch the service engine: the household still
+  -- gets its own due dates from its own touches.
+  insert into contact_events (client_id, advisor, type, event_date)
+    values ('99999999-9999-9999-9999-000000000030', 'matt', 'call', current_date);
+  perform 1 from due_dates
+    where client_id = '99999999-9999-9999-9999-000000000030' and type = 'call';
+  assert found, 'a non-mirroring household still runs its own clock';
+end $$;
+
 select 'ALL_SQL_ASSERTIONS_PASSED' as result;
 SQL

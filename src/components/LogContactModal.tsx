@@ -79,6 +79,12 @@ const DURATION_CHIPS: Record<ContactType, number[]> = {
   admin: [5, 10, 15],
 };
 
+/** "Ann", "Ann and Ben", "Ann, Ben and Cal". */
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 const TRY_AGAIN_OPTIONS = [
   { label: "Tomorrow", days: 1 },
   { label: "3 days", days: 3 },
@@ -110,8 +116,9 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   const [tryAgainDays, setTryAgainDays] = useState(3);
   // Suggestions the advisor has waved off for this note.
   const [declined, setDeclined] = useState<Set<string>>(new Set());
-  // Family members this touch should NOT count for. Empty by default: if you
-  // sat down with a household, you sat down with the household.
+  // Family members this touch should NOT count for. Seeded from each member's
+  // standing rule when you pick a household — off for the child or trust that
+  // isn't usually in the room — and overridable per touch from there.
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
   const selected = clients.find((c) => c.id === clientId) ?? null;
@@ -130,9 +137,15 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   const alsoForClientIds = household.filter((m) => !excluded.has(m.id)).map((m) => m.id);
   const coveredCount = 1 + alsoForClientIds.length;
 
-  // Switching households starts everyone included again.
+  // Switching households re-applies the standing rules from scratch, dropping
+  // whatever you'd overridden for the household you just moved off.
+  const ruledOut = household.filter((m) => !m.mirrorTouches);
   useEffect(() => {
-    setExcluded(new Set());
+    setExcluded(new Set(ruledOut.map((m) => m.id)));
+    // Deliberately keyed on the household alone: re-running this whenever the
+    // member list is re-derived would undo every tap the moment React
+    // re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
   // Default the advisor to whoever owns the household (joint → current user).
@@ -359,6 +372,13 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
                 ? "Each household keeps its own clock — this logs the same touch for each, so nobody in the family is left showing overdue."
                 : "Just this household. Tap a name to include them."}
             </p>
+            {ruledOut.length > 0 && (
+              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">
+                {joinNames(ruledOut.map((m) => m.householdName))}{" "}
+                {ruledOut.length === 1 ? "is" : "are"} set not to mirror. Tap to include{" "}
+                {ruledOut.length === 1 ? "them" : "any of them"} just this once.
+              </p>
+            )}
             {hiddenMembers > 0 && (
               <p className="mt-1.5 text-[11px] leading-relaxed font-medium text-clay-800">
                 {hiddenMembers} more in this family {hiddenMembers === 1 ? "is" : "are"} in another

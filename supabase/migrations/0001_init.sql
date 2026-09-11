@@ -72,6 +72,10 @@ create table clients (
   held_away_note   text,
   family_id        uuid references families (id) on delete set null,
   family_role      family_role,
+  -- Does a touch logged for this family land on this household too? A standing
+  -- rule per member, so the child or trust that isn't in the room doesn't get
+  -- its clock reset by a meeting it never attended.
+  mirror_touches   boolean not null default true,
   -- Opportunity tags (roth_conversion, side_fund, …). Free text so new tags
   -- are an app-side change only; the app owns the canonical list.
   tags             text[] not null default '{}',

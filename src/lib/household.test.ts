@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Client, ContactEvent } from "../types";
 import {
   householdMembers,
+  mirroringHouseholdMembers,
   otherHouseholdMembers,
   planHouseholdCatchUp,
 } from "./household";
@@ -24,6 +25,7 @@ function mkClient(overrides: Partial<Client> = {}): Client {
     heldAwayNote: null,
     familyId: null,
     familyRole: null,
+    mirrorTouches: true,
     tags: [],
     nextMeetingDate: null,
     nextMeetingNote: null,
@@ -91,6 +93,32 @@ describe("otherHouseholdMembers", () => {
   });
 });
 
+describe("mirroringHouseholdMembers", () => {
+  it("leaves out the member whose standing rule is off", () => {
+    const head = mkClient({ id: "head", familyId: "fam" });
+    const spouse = mkClient({ id: "spouse", familyId: "fam" });
+    const child = mkClient({ id: "child", familyId: "fam", mirrorTouches: false });
+    const clients = [head, spouse, child];
+
+    // The child is still a family member — Log Contact lists them, unticked.
+    expect(otherHouseholdMembers(clients, head).map((c) => c.id)).toEqual(["spouse", "child"]);
+    // ...but a touch does not land on them by default.
+    expect(mirroringHouseholdMembers(clients, head).map((c) => c.id)).toEqual(["spouse"]);
+  });
+
+  it("still leaves out archived members, rule on or not", () => {
+    const head = mkClient({ id: "head", familyId: "fam" });
+    const gone = mkClient({ familyId: "fam", active: false, mirrorTouches: true });
+    expect(mirroringHouseholdMembers([head, gone], head)).toEqual([]);
+  });
+
+  it("mirrors for everyone when no rule has been turned off", () => {
+    const head = mkClient({ id: "head", familyId: "fam" });
+    const spouse = mkClient({ id: "spouse", familyId: "fam" });
+    expect(mirroringHouseholdMembers([head, spouse], head).map((c) => c.id)).toEqual(["spouse"]);
+  });
+});
+
 describe("planHouseholdCatchUp", () => {
   const head = mkClient({ id: "head", familyId: "fam" });
   const spouse = mkClient({ id: "spouse", familyId: "fam" });
@@ -149,6 +177,16 @@ describe("planHouseholdCatchUp", () => {
     const solo = mkClient();
     const events = [mkEvent(solo.id, { type: "meeting", eventDate: "2026-06-01" })];
     expect(planHouseholdCatchUp([solo], events, solo, TODAY)).toEqual([]);
+  });
+
+  it("skips a member whose standing rule says not to mirror", () => {
+    // A bulk copy is the last place to override a rule set deliberately.
+    const child = mkClient({ id: "child", familyId: "fam", mirrorTouches: false });
+    const events = [
+      mkEvent("head", { type: "meeting", eventDate: "2026-06-01" }),
+      mkEvent("spouse", { type: "meeting", eventDate: "2026-06-01" }),
+    ];
+    expect(planHouseholdCatchUp([...clients, child], events, head, TODAY)).toEqual([]);
   });
 
   it("reports each missing member separately in a family of three", () => {

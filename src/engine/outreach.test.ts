@@ -22,6 +22,7 @@ function mkClient(o: Partial<Client> = {}): Client {
     heldAwayNote: null,
     familyId: null,
     familyRole: null,
+    mirrorTouches: true,
     tags: [],
     nextMeetingDate: null,
     nextMeetingNote: null,
