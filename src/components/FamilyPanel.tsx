@@ -218,7 +218,7 @@ export function FamilyPanel({ client }: { client: Client }) {
                 type="button"
                 title="Remove from family"
                 onClick={() => void unlinkFromFamily(m.id)}
-                className="shrink-0 cursor-pointer rounded-md p-1 text-stone-400 hover:bg-stone-200 hover:text-clay-700"
+                className="shrink-0 cursor-pointer rounded-md p-1 text-stone-400 hover:bg-stone-200 hover:text-clay-700 max-sm:inline-flex max-sm:min-h-11 max-sm:min-w-11 max-sm:items-center max-sm:justify-center"
               >
                 <XIcon className="size-3.5" />
               </button>
@@ -297,12 +297,17 @@ export function FamilyPanel({ client }: { client: Client }) {
             </div>
           </div>
         ) : (
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-stone-200 px-3 py-2.5">
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-stone-200 px-3 py-2.5 max-sm:flex-col max-sm:items-stretch">
             <span className="text-[13px] leading-snug text-ink-soft">
               {catchUp.length} {catchUp.length === 1 ? "touch" : "touches"} here{" "}
               {catchUp.length === 1 ? "isn't" : "aren't"} on the rest of the family.
             </span>
-            <Button size="sm" disabled={busy} onClick={() => setConfirmingCatchUp(true)}>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => setConfirmingCatchUp(true)}
+              className="max-sm:min-h-11 max-sm:w-full"
+            >
               Catch them up
             </Button>
           </div>

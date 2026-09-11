@@ -32,9 +32,12 @@ function navClass({ isActive }: { isActive: boolean }): string {
   }`;
 }
 
-function Brand() {
+function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-2.5 px-3">
+    // The sidebar supplies no padding of its own, so Brand carries it there.
+    // The mobile header already has px-4; without compact the lockup sits 12px
+    // right of the page content underneath and the left edge visibly steps.
+    <div className={`flex items-center gap-2.5 ${compact ? "px-0" : "px-3"}`}>
       <LogoMark className="size-7 shrink-0 text-pine-300" />
       <div className="leading-tight">
         <p className="font-display text-[17px] font-semibold text-white">Relationship Hub</p>
@@ -51,7 +54,7 @@ function LogContactButton({ compact = false }: { compact?: boolean }) {
       type="button"
       onClick={() => open()}
       className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-pine-600 font-medium text-white shadow-sm transition-colors hover:bg-pine-500 ${
-        compact ? "px-3 py-2 text-[13px]" : "w-full px-3 py-2.5 text-sm"
+        compact ? "px-3.5 py-2 text-[13px] max-sm:min-h-11" : "w-full px-3 py-2.5 text-sm"
       }`}
     >
       <PlusIcon className="size-4" />
@@ -139,7 +142,7 @@ export function Layout() {
 
   return (
     <LogContactProvider>
-      {busy && <div className="no-print fixed inset-x-0 top-0 z-50 h-0.5 animate-pulse bg-pine-500" />}
+      {busy && <div className="no-print fixed inset-x-0 top-[env(safe-area-inset-top)] z-50 h-0.5 animate-pulse bg-pine-500" />}
 
       {/* Desktop sidebar */}
       <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-5 bg-ink py-5 md:flex">
@@ -161,27 +164,33 @@ export function Layout() {
       </aside>
 
       {/* Mobile top bar: brand + the ever-present Log action */}
-      <header className="no-print sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-ink px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:hidden">
-        <Brand />
+      <header className="no-print sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-ink px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
+        <Brand compact />
         <LogContactButton compact />
       </header>
 
       {/* Mobile bottom tab bar — the app-like primary nav */}
-      <nav className="no-print fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden">
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-stone-200/80 bg-white/85 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-6px_rgb(33_29_25/0.16)] backdrop-blur-xl md:hidden">
         {NAV.map(({ to, short, Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-0.5 pt-2 pb-1.5 text-[10px] font-medium transition-colors ${
-                isActive ? "text-pine-700" : "text-stone-400 hover:text-ink"
+              `flex flex-col items-center gap-1 px-0.5 pt-2 pb-2 text-[11px] leading-none font-medium transition-colors ${
+                isActive ? "text-pine-700" : "text-stone-500 hover:text-ink"
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <Icon className={`size-5 ${isActive ? "text-pine-600" : ""}`} />
+                <span
+                  className={`flex items-center justify-center rounded-full px-3.5 py-0.5 transition-colors ${
+                    isActive ? "bg-pine-50" : ""
+                  }`}
+                >
+                  <Icon className={`size-5 ${isActive ? "text-pine-600" : ""}`} />
+                </span>
                 <span className="truncate">{short}</span>
               </>
             )}
@@ -189,8 +198,8 @@ export function Layout() {
         ))}
       </nav>
 
-      <main className="min-h-screen md:pl-60">
-        <div className="mx-auto max-w-6xl px-4 pt-6 pb-28 sm:px-6 md:px-8 md:py-8">
+      <main className="min-h-dvh md:pl-60">
+        <div className="mx-auto max-w-6xl px-4 pt-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:px-6 md:px-8 md:py-8 md:pb-8">
           {error && (
             <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-clay-200 bg-clay-50 px-4 py-3 text-sm text-clay-900">
               <span className="min-w-0">{error}</span>

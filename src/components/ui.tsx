@@ -25,7 +25,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({ variant = "secondary", size = "md", className = "", type = "button", ...props }: ButtonProps) {
-  const sizing = size === "sm" ? "px-2.5 py-1.5 text-[13px] gap-1.5" : "px-4 py-2 text-sm gap-2";
+  // md is the app's default button and on a phone it is a thumb target, so it
+  // stands 44px tall at base width and falls back to today's 38px from sm up.
+  const sizing =
+    size === "sm"
+      ? "px-2.5 py-1.5 text-[13px] gap-1.5"
+      : "px-4 py-2 text-sm gap-2 max-sm:py-3";
   return (
     <button
       type={type}
@@ -83,14 +88,14 @@ export function Modal({ open, onClose, title, subtitle, children, wide }: ModalP
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`animate-rise relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-lift sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-lg"}`}
+        className={`animate-rise relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-lift max-sm:rounded-t-3xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-lg"}`}
       >
-        <div className="shrink-0 px-5 pt-4 sm:px-6 sm:pt-6">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 sm:hidden" />
-          <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="shrink-0 px-5 pt-4 sm:px-6 sm:pt-6 max-sm:pt-3">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 sm:hidden max-sm:mb-2.5" />
+          <div className="mb-4 flex items-start justify-between gap-4 max-sm:mb-3">
             <div>
-              <h2 className="text-xl font-semibold">{title}</h2>
-              {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
+              <h2 className="text-xl font-semibold max-sm:text-lg">{title}</h2>
+              {subtitle && <p className="mt-1 text-sm text-ink-soft max-sm:text-[13px]">{subtitle}</p>}
             </div>
             <button
               type="button"
@@ -138,8 +143,11 @@ export function Field({ label, hint, children, group = false }: FieldProps) {
   );
 }
 
+// text-base at base width is not a style choice: iOS Safari zooms the page
+// when a field smaller than 16px takes focus. py-2.5 puts the control at 46px,
+// a real thumb target. Both revert to today's values from sm up.
 const CONTROL =
-  "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-stone-400 transition-colors focus:border-pine-500";
+  "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-stone-400 transition-colors focus:border-pine-500 max-sm:py-2.5 max-sm:text-base";
 
 export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`${CONTROL} ${className}`} {...props} />;
@@ -165,10 +173,19 @@ interface SegmentedProps<T extends string> {
 }
 
 export function Segmented<T extends string>({ options, value, onChange, className = "" }: SegmentedProps<T>) {
+  // Three or four options with icons and labels do not fit across a phone —
+  // the last one gets clipped at the screen edge. Wrap them into two columns
+  // at base width instead, and go back to a single row from sm up.
+  const wrap = options.length > 2;
   return (
-    <div className={`flex rounded-lg bg-stone-200/70 p-1 ${className}`} role="radiogroup">
-      {options.map((opt) => {
+    <div
+      className={`rounded-lg bg-stone-200/70 p-1 ${wrap ? "flex max-sm:grid max-sm:grid-cols-2 max-sm:gap-1" : "flex"} ${className}`}
+      role="radiogroup"
+    >
+      {options.map((opt, i) => {
         const active = opt.value === value;
+        // An odd count leaves a gap on the last row; let it span instead.
+        const spans = wrap && options.length % 2 === 1 && i === options.length - 1;
         return (
           <button
             key={opt.value}
@@ -176,9 +193,9 @@ export function Segmented<T extends string>({ options, value, onChange, classNam
             role="radio"
             aria-checked={active}
             onClick={() => onChange(opt.value)}
-            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
-              active ? "bg-white text-ink shadow-sm" : "text-ink-soft hover:text-ink"
-            }`}
+            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all max-sm:min-h-11 ${
+              spans ? "max-sm:col-span-2" : ""
+            } ${active ? "bg-white text-ink shadow-sm" : "text-ink-soft hover:text-ink"}`}
           >
             {opt.icon}
             {opt.label}

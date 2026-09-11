@@ -288,13 +288,24 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
           {selected ? (
             <div className="rounded-lg border border-stone-300 bg-stone-50 px-3 py-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <TierBadge tier={selected.tier} />
-                  <span className="truncate text-sm font-medium">{selected.householdName}</span>
-                  <AdvisorChip advisor={selected.assignedAdvisor} />
-                  {selected.heldAway && <HeldAwayBadge note={selected.heldAwayNote} />}
+                {/* Identity on its own line at phone width; the badges wrap
+                    underneath instead of crushing the name. */}
+                <div className="flex min-w-0 flex-1 items-center gap-2 max-sm:flex-col max-sm:items-stretch max-sm:gap-1.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <TierBadge tier={selected.tier} />
+                    <span className="truncate text-sm font-medium">{selected.householdName}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AdvisorChip advisor={selected.assignedAdvisor} />
+                    {selected.heldAway && <HeldAwayBadge note={selected.heldAwayNote} />}
+                  </div>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => { setClientId(null); setQuery(""); }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 max-sm:min-h-11"
+                  onClick={() => { setClientId(null); setQuery(""); }}
+                >
                   Change
                 </Button>
               </div>
@@ -547,7 +558,7 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2 pt-1">
+        <div className="flex items-center justify-end gap-2 pt-1 max-sm:sticky max-sm:bottom-[calc(max(1.25rem,env(safe-area-inset-bottom))*-1)] max-sm:z-10 max-sm:-mx-5 max-sm:-mb-[max(1.25rem,env(safe-area-inset-bottom))] max-sm:border-t max-sm:border-stone-200 max-sm:bg-white max-sm:px-5 max-sm:pt-3 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
