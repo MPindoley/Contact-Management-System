@@ -113,8 +113,11 @@ export function ActionQueue() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Action Queue</h1>
           <p className="mt-1.5 text-sm text-ink-soft">
-            {rows.length} open {rows.length === 1 ? "item" : "items"} · tasks surface 14 days
-            before they're due and escalate when they slip.
+            {rows.length} open {rows.length === 1 ? "item" : "items"}
+            <span className="max-sm:hidden">
+              {" "}
+              · tasks surface 14 days before they're due and escalate when they slip.
+            </span>
           </p>
         </div>
         <Button
@@ -141,7 +144,7 @@ export function ActionQueue() {
 
       <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative w-full sm:w-auto">
-          <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400" />
+          <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400 max-sm:top-1/2 max-sm:-translate-y-1/2" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}

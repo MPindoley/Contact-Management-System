@@ -8,6 +8,15 @@
     <meta name="theme-color" content="#211d19" />
     <link rel="apple-touch-icon" href="/pwa-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!--
+      Without this, iOS starts the web view BELOW an opaque light status bar:
+      you get a white band above the dark header, and env(safe-area-inset-top)
+      resolves to 0 so the padding written to handle it never fires. With
+      black-translucent the ink header runs under the status bar and its white
+      glyphs read correctly against it.
+    -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Hub" />
     <title>Relationship Hub</title>
   </head>

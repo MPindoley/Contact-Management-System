@@ -72,6 +72,11 @@
 @layer base {
   html {
     @apply antialiased;
+    /* Kill the grey box mobile browsers paint over every tap -- the single
+       loudest "this is a web page, not an app" tell. Both are no-ops on a
+       desktop pointer. */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
   body {
     @apply bg-paper font-sans text-[15px] text-ink;
@@ -86,6 +91,20 @@
   }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-pine-500;
+  }
+
+  /* Touch only: never matches a mouse, so desktop keeps today's behaviour.
+     Stops the whole document rubber-banding open behind an installed PWA and
+     drops the 300ms wait browsers add before firing a tap. */
+  @media (pointer: coarse) {
+    body {
+      overscroll-behavior-y: none;
+    }
+    a,
+    button,
+    [role="button"] {
+      touch-action: manipulation;
+    }
   }
 }
 

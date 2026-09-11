@@ -20,11 +20,14 @@ export function SnoozeButton({
   type,
   householdName,
   compact = false,
+  className = "",
 }: {
   clientId: string;
   type: TouchType;
   householdName: string;
   compact?: boolean;
+  /** Applied to the wrapper so a caller can size it within a flex row. */
+  className?: string;
 }) {
   const { snoozeTouch, today, busy } = useApp();
   const toast = useToast();
@@ -57,11 +60,11 @@ export function SnoozeButton({
   }
 
   const trigger = compact
-    ? "rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-ink"
-    : "rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm hover:border-stone-400 hover:bg-stone-50";
+    ? "rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-ink max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center"
+    : "rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm hover:border-stone-400 hover:bg-stone-50 max-sm:min-h-11 max-sm:w-full max-sm:justify-center";
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={`relative ${className}`} ref={ref}>
       <button
         type="button"
         title="Snooze — left a voicemail, remind me later"

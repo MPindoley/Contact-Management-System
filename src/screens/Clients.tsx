@@ -130,7 +130,7 @@ export function Clients() {
             schedule.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2">
           {linkableFamilies > 0 && (
             <Button onClick={() => setLinking(true)}>
               <UsersIcon className="size-4" />
@@ -138,7 +138,11 @@ export function Clients() {
             </Button>
           )}
           <Button onClick={() => navigate("/clients/import")}>Import CSV</Button>
-          <Button variant="primary" onClick={() => setAdding(true)}>
+          <Button
+            variant="primary"
+            onClick={() => setAdding(true)}
+            className="max-sm:order-first max-sm:col-span-2"
+          >
             <PlusIcon className="size-4" />
             Add household
           </Button>
@@ -206,7 +210,7 @@ export function Clients() {
 
       <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative w-full sm:w-auto">
-          <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400" />
+          <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-stone-400 max-sm:top-1/2 max-sm:-translate-y-1/2" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -244,7 +248,7 @@ export function Clients() {
             </Select>
           </div>
         </div>
-        <div className="w-full sm:w-52">
+        <div className="w-full sm:w-52 max-sm:flex max-sm:items-center max-sm:gap-3">
           <Select
             value={tagFilter}
             onChange={(e) => setTagFilter(e.target.value as "all" | ClientTag)}
@@ -257,8 +261,17 @@ export function Clients() {
               </option>
             ))}
           </Select>
+          <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-2 text-[13px] text-ink-soft select-none sm:hidden">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+              className="size-4 cursor-pointer accent-pine-700"
+            />
+            Inactive
+          </label>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-soft select-none">
+        <label className="hidden cursor-pointer items-center gap-2 text-[13px] text-ink-soft select-none sm:flex">
           <input
             type="checkbox"
             checked={showInactive}
@@ -290,7 +303,7 @@ export function Clients() {
                 key={client.id}
                 type="button"
                 onClick={() => navigate(`/clients/${client.id}`)}
-                className="card flex w-full items-center gap-3 p-3 text-left transition-colors active:bg-pine-50/60"
+                className="card flex w-full items-start gap-3 p-3.5 text-left transition-colors active:bg-pine-50/60"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -307,17 +320,19 @@ export function Clients() {
                     {nextDue && client.active && <DuePhrase dueDate={nextDue.dueDate} today={today} />}
                   </div>
                   {client.tags.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
+                    <div className="mt-1 flex flex-wrap gap-1">
                       {client.tags.map((t) => (
                         <TagChip key={t} tag={t} />
                       ))}
                     </div>
                   )}
-                  <p className="tnum mt-1 text-xs text-stone-400">
+                  <p className="tnum mt-1.5 text-xs text-stone-500">
                     Last contact: {lastContact ? formatShort(lastContact.eventDate) : "—"}
                   </p>
                 </div>
-                <ScorePill score={score} />
+                <span className="mt-0.5 shrink-0">
+                  <ScorePill score={score} />
+                </span>
               </button>
             ))}
           </div>

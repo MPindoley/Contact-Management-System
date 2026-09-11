@@ -143,7 +143,7 @@ export function FirmReport() {
       </header>
 
       <section className="grid gap-4 lg:grid-cols-4">
-        <div className="card flex flex-col items-center justify-center p-6">
+        <div className="card flex min-w-0 flex-col items-center justify-center p-6">
           <ScoreRing value={report.firmScore?.score ?? null} size={150} caption="Firm service score" />
           <p className="tnum mt-3 text-xs text-stone-400">
             {report.activeCount} active households
@@ -155,31 +155,33 @@ export function FirmReport() {
         </div>
 
         {report.advisorRows.map(({ key, clients, score, overdue }) => (
-          <div key={key} className="card flex flex-col items-center p-5">
+          <div key={key} className="card flex min-w-0 flex-col items-center p-5 max-sm:items-stretch">
             <div className="mb-3 flex w-full items-center justify-between">
               <span className="text-sm font-semibold">{ADVISOR_LABELS[key]}</span>
               {score && (
                 <span className={`size-2.5 rounded-full ${SCORE_DOT_STYLES[scoreColor(score.score)]}`} />
               )}
             </div>
-            <ScoreRing value={score?.score ?? null} size={104} strokeWidth={9} />
-            <dl className="mt-4 w-full space-y-1 text-[13px]">
-              <div className="flex justify-between">
-                <dt className="text-ink-soft">Households</dt>
-                <dd className="tnum font-medium">{clients.length}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-ink-soft">With overdue items</dt>
-                <dd className={`tnum font-medium ${overdue > 0 ? "text-clay-700" : ""}`}>{overdue}</dd>
-              </div>
-            </dl>
+            <div className="contents max-sm:flex max-sm:w-full max-sm:items-center max-sm:gap-5">
+              <ScoreRing value={score?.score ?? null} size={104} strokeWidth={9} />
+              <dl className="mt-4 w-full space-y-1 text-[13px] max-sm:mt-0">
+                <div className="flex justify-between">
+                  <dt className="text-ink-soft">Households</dt>
+                  <dd className="tnum font-medium">{clients.length}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-ink-soft">With overdue items</dt>
+                  <dd className={`tnum font-medium ${overdue > 0 ? "text-clay-700" : ""}`}>{overdue}</dd>
+                </div>
+              </dl>
+            </div>
           </div>
         ))}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
         {report.tierRows.map(({ tier, model, required, clients, score, overdue }) => (
-          <div key={tier} className="card p-5">
+          <div key={tier} className="card min-w-0 p-5">
             <div className="flex items-center justify-between">
               <TierBadge tier={tier} label />
               <span className="tnum text-xs text-stone-400">
@@ -204,7 +206,7 @@ export function FirmReport() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <div className="card p-5">
+        <div className="card min-w-0 p-5">
           <h2 className="text-sm font-semibold">This month — {formatMonth(today)}</h2>
           <div className="mt-4 flex items-baseline gap-2">
             <span className="font-display text-4xl font-semibold">{report.pace.completed}</span>
@@ -221,7 +223,7 @@ export function FirmReport() {
           </p>
         </div>
 
-        <div className="card p-5">
+        <div className="card min-w-0 p-5">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold">Most overdue</h2>
             <span className="tnum text-xs text-stone-400">
@@ -239,19 +241,21 @@ export function FirmReport() {
               {report.overdueTasks.slice(0, 6).map((t: Task) => {
                 const client = report.byId.get(t.clientId)!;
                 return (
-                  <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
+                  <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm max-sm:py-3">
                     <TierBadge tier={client.tier} />
-                    <Link
-                      to={`/clients/${client.id}`}
-                      className="min-w-0 flex-1 truncate font-medium hover:underline"
-                    >
-                      {client.householdName}
-                    </Link>
-                    <TypeChip type={t.type} short />
+                    <div className="flex min-w-0 flex-1 items-center gap-3 max-sm:flex-col max-sm:items-start max-sm:gap-0.5">
+                      <Link
+                        to={`/clients/${client.id}`}
+                        className="min-w-0 max-w-full flex-1 truncate font-medium hover:underline"
+                      >
+                        {client.householdName}
+                      </Link>
+                      <TypeChip type={t.type} short />
+                    </div>
                     <span className="hidden sm:inline-flex">
                       <AdvisorChip advisor={client.assignedAdvisor} />
                     </span>
-                    <span className="tnum w-14 text-right text-[13px] font-semibold text-clay-700">
+                    <span className="tnum w-14 text-right text-[13px] font-semibold text-clay-700 max-sm:w-10">
                       {t.daysOverdue}d
                     </span>
                   </li>

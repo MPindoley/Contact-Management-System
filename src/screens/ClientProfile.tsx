@@ -26,6 +26,11 @@ export function ClientProfile() {
   const { open } = useLogContact();
   const [editing, setEditing] = useState(false);
   const [editingEvent, setEditingEvent] = useState<ContactEvent | null>(null);
+  // A year of history is a reference on a desktop and a wall on a phone, so
+  // only the two most recent months are shown there until asked. Desktop always
+  // renders the lot: the collapse is CSS-only (max-sm:hidden), so nothing is
+  // withheld from a wide screen and nothing is unmounted from the DOM.
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   const client = data?.clients.find((c) => c.id === clientId) ?? null;
 
@@ -91,7 +96,7 @@ export function ClientProfile() {
         <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight">{client.householdName}</h1>
+              <h1 className="text-3xl font-semibold tracking-tight max-sm:text-2xl">{client.householdName}</h1>
               {!client.active && (
                 <span className="rounded-full bg-stone-200 px-2.5 py-1 text-[11px] font-semibold text-stone-600 uppercase">
                   Inactive
@@ -122,10 +127,14 @@ export function ClientProfile() {
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2">
             <Button onClick={() => navigate(`/clients/${client.id}/prep`)}>Prep sheet</Button>
             <Button onClick={() => setEditing(true)}>Edit</Button>
-            <Button variant="primary" onClick={() => open(client.id)}>
+            <Button
+              variant="primary"
+              onClick={() => open(client.id)}
+              className="max-sm:col-span-2"
+            >
               <PlusIcon className="size-4" />
               Log contact
             </Button>
@@ -177,8 +186,11 @@ export function ClientProfile() {
               />
             ) : (
               <div className="mt-4 space-y-5">
-                {derived.months.map(([month, events]) => (
-                  <div key={month}>
+                {derived.months.map(([month, events], monthIndex) => (
+                  <div
+                    key={month}
+                    className={monthIndex > 1 && !showAllHistory ? "max-sm:hidden" : undefined}
+                  >
                     <p className="text-[11px] font-semibold tracking-wider text-stone-400 uppercase">
                       {formatMonth(`${month}-01`)}
                     </p>
@@ -186,13 +198,13 @@ export function ClientProfile() {
                       {events.map((e) => (
                         <li
                           key={e.id}
-                          className="group flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-stone-50"
+                          className="group flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-stone-50 max-sm:flex-wrap max-sm:gap-x-3 max-sm:gap-y-1"
                         >
                           <span className="tnum w-12 shrink-0 pt-0.5 text-xs font-semibold text-ink-soft">
                             {formatShort(e.eventDate).replace(/, \d{4}$/, "")}
                           </span>
                           <TypeChip type={e.type} short />
-                          <div className="min-w-0 flex-1 text-[13px] leading-snug">
+                          <div className="min-w-0 flex-1 text-[13px] leading-snug max-sm:order-last max-sm:basis-full">
                             {e.notes ? (
                               <p className="text-ink">{e.notes}</p>
                             ) : (
@@ -207,7 +219,7 @@ export function ClientProfile() {
                           <button
                             type="button"
                             onClick={() => setEditingEvent(e)}
-                            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-ink-soft opacity-0 transition-opacity hover:bg-stone-200/70 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-ink-soft opacity-0 transition-opacity hover:bg-stone-200/70 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 max-sm:ml-auto max-sm:opacity-100"
                           >
                             Edit
                           </button>
@@ -216,6 +228,18 @@ export function ClientProfile() {
                     </ul>
                   </div>
                 ))}
+                {/* sm:hidden, so desktop never renders it and its markup cannot
+                    shift anything there. */}
+                {derived.months.length > 2 && !showAllHistory && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllHistory(true)}
+                    className="min-h-11 w-full cursor-pointer rounded-lg border border-stone-200 text-[13px] font-medium text-ink-soft transition-colors hover:bg-stone-50 sm:hidden"
+                  >
+                    Show all {derived.recentCount}{" "}
+                    {derived.recentCount === 1 ? "touch" : "touches"}
+                  </button>
+                )}
                 {derived.olderCount > 0 && (
                   <p className="text-center text-xs text-stone-400">
                     + {derived.olderCount} older {derived.olderCount === 1 ? "touch" : "touches"} on
@@ -227,25 +251,27 @@ export function ClientProfile() {
           </section>
         </div>
 
-        <aside className="space-y-4">
+        <aside className="space-y-4 max-lg:order-first">
           <UpcomingMeetingPanel client={client} />
           <FamilyPanel client={client} />
           <section className="card flex flex-col items-center p-5">
             <h2 className="self-start text-sm font-semibold">Service health</h2>
-            <div className="my-4">
-              <ScoreRing value={derived.score.score} size={132} caption="trailing 12 months" />
-            </div>
-            <div className="w-full space-y-3">
-              <BreakdownRow
-                label="Meetings"
-                completed={derived.score.completedMeetings}
-                required={derived.score.requiredMeetings}
-              />
-              <BreakdownRow
-                label="Calls"
-                completed={derived.score.completedCalls}
-                required={derived.score.requiredCalls}
-              />
+            <div className="contents max-sm:flex max-sm:w-full max-sm:items-center max-sm:gap-5">
+              <div className="my-4 max-sm:my-0 max-sm:shrink-0">
+                <ScoreRing value={derived.score.score} size={132} caption="trailing 12 months" />
+              </div>
+              <div className="w-full space-y-3">
+                <BreakdownRow
+                  label="Meetings"
+                  completed={derived.score.completedMeetings}
+                  required={derived.score.requiredMeetings}
+                />
+                <BreakdownRow
+                  label="Calls"
+                  completed={derived.score.completedCalls}
+                  required={derived.score.requiredCalls}
+                />
+              </div>
             </div>
             <p className="mt-4 text-xs leading-relaxed text-stone-400">
               Contacts completed on schedule ÷ contacts required for Tier {client.tier}. Admin

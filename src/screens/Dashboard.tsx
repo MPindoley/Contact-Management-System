@@ -86,9 +86,10 @@ export function Dashboard() {
           </h1>
           <p className="mt-1.5 text-sm text-ink-soft">{summary}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-sm:w-full">
           {derived.isAdvisor && (
             <Segmented<"mine" | "firm">
+              className="max-sm:flex-1"
               value={view}
               onChange={setView}
               options={[
@@ -169,14 +170,14 @@ export function Dashboard() {
       </div>
 
       {(derived.horizon.length > 0 || derived.scheduled.length > 0) && (
-        <section className="card p-5">
+        <section className="card p-5 max-sm:p-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <ClockIcon className="size-4 text-stone-400" />
             On the horizon — next 7 days
           </h2>
           <ul className="mt-3 divide-y divide-stone-100">
             {derived.scheduled.map((c) => (
-              <li key={`sched-${c.id}`} className="flex items-center gap-3 py-2 text-sm">
+              <li key={`sched-${c.id}`} className="flex items-center gap-3 py-2 text-sm max-sm:gap-2.5 max-sm:py-3">
                 <span className="tnum w-14 shrink-0 text-xs font-semibold text-ink-soft">
                   {formatShort(c.nextMeetingDate!)}
                 </span>
@@ -187,7 +188,7 @@ export function Dashboard() {
                 >
                   {c.householdName}
                 </Link>
-                <span className="shrink-0 rounded-full bg-pine-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-pine-800 uppercase">
+                <span className="shrink-0 rounded-full bg-pine-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-pine-800 uppercase max-sm:hidden">
                   Booked
                 </span>
                 <TierBadge tier={c.tier} />
@@ -196,7 +197,7 @@ export function Dashboard() {
             {derived.horizon.map((t) => {
               const client = derived.byId.get(t.clientId)!;
               return (
-                <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
+                <li key={t.id} className="flex items-center gap-2.5 py-3 text-sm sm:gap-3 sm:py-2">
                   <span className="tnum w-14 shrink-0 text-xs font-semibold text-ink-soft">
                     {formatShort(t.dueDate)}
                   </span>
@@ -252,7 +253,7 @@ function Column({ title, accent, icon, count, countTone = "default", empty, chil
           {count}
         </span>
       </div>
-      <div className="space-y-2 px-3 pb-3">{count === 0 ? empty : children}</div>
+      <div className="space-y-2 px-3 pb-3 max-sm:space-y-0 max-sm:px-0 max-sm:pb-0">{count === 0 ? empty : children}</div>
     </section>
   );
 }
@@ -270,14 +271,16 @@ function TaskCard({
 }) {
   const { open } = useLogContact();
   return (
-    <div className="group rounded-xl border border-stone-200 bg-white p-3 transition-all hover:-translate-y-px hover:border-stone-300 hover:shadow-lift">
-      <div className="flex items-start justify-between gap-2">
+    <div className="group rounded-xl border border-stone-200 bg-white p-3 transition-all hover:-translate-y-px hover:border-stone-300 hover:shadow-lift max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-4 max-sm:last:border-b">
+      {/* The name is what this screen exists to tell you, so on a phone it gets
+          the whole width and the actions take their own row underneath. */}
+      <div className="flex items-start justify-between gap-2 max-sm:flex-col">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <TierBadge tier={client.tier} />
             <Link
               to={`/clients/${client.id}`}
-              className="truncate text-sm font-semibold hover:underline"
+              className="truncate text-sm font-semibold hover:underline max-sm:text-[15px]"
             >
               {client.householdName}
             </Link>
@@ -289,16 +292,21 @@ function TaskCard({
           </div>
           {task.type === "call" && client.phone && (
             <div className="mt-1.5">
-              <PhoneLink phone={client.phone} />
+              <PhoneLink phone={client.phone} className="max-sm:min-h-11 max-sm:text-sm" />
             </div>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <SnoozeButton clientId={client.id} type={task.type} householdName={client.householdName} />
+        <div className="flex shrink-0 items-center gap-1.5 max-sm:w-full max-sm:gap-2">
+          <SnoozeButton
+            clientId={client.id}
+            type={task.type}
+            householdName={client.householdName}
+            className="max-sm:flex-1"
+          />
           <button
             type="button"
             onClick={() => open(client.id)}
-            className="cursor-pointer rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm transition-colors hover:border-pine-600 hover:bg-pine-700 hover:text-white"
+            className="cursor-pointer rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-ink-soft shadow-sm transition-colors hover:border-pine-600 hover:bg-pine-700 hover:text-white max-sm:flex max-sm:min-h-11 max-sm:flex-1 max-sm:items-center max-sm:justify-center"
           >
             Log
           </button>
