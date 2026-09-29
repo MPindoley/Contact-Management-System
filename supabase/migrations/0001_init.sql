@@ -568,6 +568,12 @@ create policy "scoped prospect events" on prospect_events for all to authenticat
 
 -- Base table privileges (the policies above still decide which rows are visible).
 grant select, insert, update, delete on all tables in schema public to authenticated;
+-- "all tables" means the ones that exist right now, so a table added by a later
+-- migration would not be covered and every query against it would fail with
+-- "permission denied" before RLS was ever consulted. Default privileges apply
+-- to tables created after this line, which closes that gap for good.
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
 grant execute on function app_sees_all(), app_is_assistant(), app_advisor_key() to authenticated;
 grant execute on function fn_prune_empty_families() to authenticated;
 
