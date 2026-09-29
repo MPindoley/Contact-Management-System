@@ -2,10 +2,10 @@
 // for the real last-touch dates so the service clock starts from the truth,
 // not from today.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { AdvisorAssignment, Client, ClientTag, Tier } from "../types";
-import { ADVISOR_LABELS, CLIENT_TAGS, CLIENT_TAG_LABELS, TIERS } from "../types";
+import { ADVISOR_LABELS, TIERS, sortedTags } from "../types";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { todayISO } from "../lib/dates";
@@ -28,6 +28,7 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
 
 function ClientForm({ onClose, client }: { onClose: () => void; client?: Client }) {
   const { data, addClient, updateClient, deleteClient, busy } = useApp();
+  const tagDefs = useMemo(() => sortedTags(data?.clientTags ?? []), [data]);
   const toast = useToast();
   const navigate = useNavigate();
   const editing = Boolean(client);
@@ -206,7 +207,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
 
           {tagsOpen && (
             <div className="grid gap-0.5 border-t border-stone-100 p-2 sm:grid-cols-2">
-              {CLIENT_TAGS.map((t) => (
+              {tagDefs.map(({ id: t, label }: { id: ClientTag; label: string }) => (
                 <label
                   key={t}
                   className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors select-none hover:bg-stone-50"
@@ -217,7 +218,7 @@ function ClientForm({ onClose, client }: { onClose: () => void; client?: Client 
                     onChange={() => toggleTag(t)}
                     className="size-4 shrink-0 cursor-pointer accent-indigo-600"
                   />
-                  {CLIENT_TAG_LABELS[t]}
+                  {label}
                 </label>
               ))}
             </div>

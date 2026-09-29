@@ -7,12 +7,14 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   AddClientInput,
+  AddClientTagInput,
   AddProspectInput,
   AdvisorAssignment,
   AdvisorKey,
   TouchAuthor,
   Client,
   ClientTag,
+  ClientTagDef,
   ContactEvent,
   ContactType,
   DataSnapshot,
@@ -33,6 +35,7 @@ import type {
   Tier,
   TouchType,
   UpdateClientInput,
+  UpdateClientTagInput,
   UpdateContactInput,
   UpdateProspectInput,
   User,
@@ -40,6 +43,7 @@ import type {
 import type { DataAdapter } from "./adapter";
 import { surnameOf } from "../importCsv";
 import { uid } from "../../engine/serviceEngine";
+import { DEFAULT_CLIENT_TAGS, slugifyTag } from "../../types";
 import { planHouseholdCatchUp } from "../household";
 import { todayISO } from "../dates";
 
@@ -120,6 +124,12 @@ interface FamilyRow {
   name: string;
   created_at: string;
 }
+interface ClientTagRow {
+  id: string;
+  label: string;
+  keywords: string[] | null;
+  sort_order: number | null;
+}
 interface ServiceModelRow {
   tier: Tier;
   meeting_interval_days: number;
@@ -186,6 +196,12 @@ const mapClient = (r: ClientRow): Client => ({
   nextMeetingDate: r.next_meeting_date ?? null,
   nextMeetingNote: r.next_meeting_note ?? null,
   createdAt: r.created_at,
+});
+const mapClientTag = (r: ClientTagRow): ClientTagDef => ({
+  id: r.id,
+  label: r.label,
+  keywords: r.keywords ?? [],
+  sortOrder: r.sort_order ?? 0,
 });
 const mapFamily = (r: FamilyRow): Family => ({
   id: r.id,
@@ -281,6 +297,19 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
 /**
  * Row-level security speaks in Postgres. Nobody using a CRM should have to.
  */
+/** Keywords are matched lower-case, so they are stored that way. */
+function normaliseKeywords(raw: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of raw) {
+    const v = k.trim().toLowerCase();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
 function friendlyWriteError(message: string): string {
   if (/row-level security|violates row-level/i.test(message)) {
     return "that household is in another advisor's book. Ask them to log it.";
@@ -313,8 +342,10 @@ export function createSupabaseAdapter(): DataAdapter {
   }
 
   async function fetchSnapshot(): Promise<DataSnapshot> {
-    const [users, clients, models, events, dueDates, tasks, prospects, prospectEvents, families] =
-      await Promise.all([
+    const [
+      users, clients, models, events, dueDates, tasks, prospects, prospectEvents, families,
+      clientTags,
+    ] = await Promise.all([
         db.from("users").select("*").order("name"),
         db.from("clients").select("*").order("household_name"),
         db.from("service_models").select("*").order("tier"),
@@ -324,6 +355,7 @@ export function createSupabaseAdapter(): DataAdapter {
         db.from("prospects").select("*").order("name"),
         db.from("prospect_events").select("*").order("event_date", { ascending: false }).limit(5000),
         db.from("families").select("*").order("name"),
+        db.from("client_tags").select("*").order("sort_order"),
       ]);
 
     return {
@@ -338,6 +370,11 @@ export function createSupabaseAdapter(): DataAdapter {
         mapProspectEvent,
       ),
       families: unwrap<FamilyRow[]>(families, "Loading families").map(mapFamily),
+      // Falls back to the built-in set when the table is missing, so the app
+      // still runs against a database that has not had migration 0011 yet.
+      clientTags: clientTags.error
+        ? DEFAULT_CLIENT_TAGS.map((t) => ({ ...t, keywords: [...t.keywords] }))
+        : unwrap<ClientTagRow[]>(clientTags, "Loading tags").map(mapClientTag),
     };
   }
 
@@ -714,6 +751,64 @@ export function createSupabaseAdapter(): DataAdapter {
         })
         .eq("tier", model.tier);
       if (error) throw new Error(`Updating service model: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async addClientTag(input: AddClientTagInput) {
+      const label = input.label.trim();
+      if (!label) throw new Error("Give the tag a name.");
+      const id = slugifyTag(label);
+      if (!id) throw new Error("That name has no letters or numbers in it.");
+      const existing = await db.from("client_tags").select("id,label").eq("id", id).maybeSingle();
+      if (existing.data) throw new Error(`There's already a tag called "${label}".`);
+      const top = await db
+        .from("client_tags")
+        .select("sort_order")
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const { error } = await db.from("client_tags").insert({
+        id,
+        label,
+        keywords: normaliseKeywords(input.keywords),
+        sort_order: ((top.data as { sort_order: number } | null)?.sort_order ?? -1) + 1,
+      });
+      if (error) throw new Error(`Adding the tag: ${error.message}`);
+      return fetchSnapshot();
+    },
+
+    async updateClientTag(id: string, patch: UpdateClientTagInput) {
+      const row: Record<string, unknown> = {};
+      if (patch.label !== undefined) {
+        const label = patch.label.trim();
+        if (!label) throw new Error("Give the tag a name.");
+        // Renaming never re-slugs: the id is what households already store.
+        row.label = label;
+      }
+      if (patch.keywords !== undefined) row.keywords = normaliseKeywords(patch.keywords);
+      if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+      if (Object.keys(row).length > 0) {
+        const { error } = await db.from("client_tags").update(row).eq("id", id);
+        if (error) throw new Error(`Saving the tag: ${error.message}`);
+      }
+      return fetchSnapshot();
+    },
+
+    async deleteClientTag(id: string) {
+      // Strip it from households FIRST. If the delete failed afterwards the tag
+      // would simply still be there to try again; the other order could leave
+      // households carrying an id with no definition.
+      const holders = unwrap<Array<{ id: string; tags: string[] | null }>>(
+        await db.from("clients").select("id,tags").contains("tags", [id]),
+        "Finding households with that tag",
+      );
+      for (const c of holders) {
+        const next = (c.tags ?? []).filter((t) => t !== id);
+        const { error } = await db.from("clients").update({ tags: next }).eq("id", c.id);
+        if (error) throw new Error(`Removing the tag from a household: ${error.message}`);
+      }
+      const { error } = await db.from("client_tags").delete().eq("id", id);
+      if (error) throw new Error(`Deleting the tag: ${error.message}`);
       return fetchSnapshot();
     },
 

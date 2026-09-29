@@ -16,7 +16,7 @@ import { TOUCH_AUTHOR_LABELS, TOUCH_AUTHORS, CONTACT_TYPE_LABELS, authorForUser 
 import { useApp } from "../lib/store";
 import { suggestFromNote } from "../lib/noteSuggestions";
 import { otherHouseholdMembers } from "../lib/household";
-import { CLIENT_TAG_LABELS, type ClientTag } from "../types";
+import { sortedTags, tagLabel, type ClientTag } from "../types";
 import { useToast } from "../lib/toast";
 import { addDays, formatMedium, todayISO } from "../lib/dates";
 import { Button, Field, Input, Modal, Segmented, Select, Spinner, Textarea } from "./ui";
@@ -163,12 +163,13 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
   // What the note implies: opportunity tags, and when to see them next.
   // Nothing leaves the browser — this is keyword matching over the firm's own
   // tag list, so it is instant and always says the same thing.
+  const tagDefs = useMemo(() => sortedTags(data?.clientTags ?? []), [data]);
   const suggestions = useMemo(
     () =>
       selected
-        ? suggestFromNote(notes, selected.tags, today)
+        ? suggestFromNote(notes, selected.tags, today, tagDefs)
         : { tags: [] as ClientTag[], meetingDate: null, meetingPhrase: null },
-    [notes, selected, today],
+    [notes, selected, today, tagDefs],
   );
   const keptTags = suggestions.tags.filter((t) => !declined.has(t));
   const keepMeeting = Boolean(suggestions.meetingDate) && !declined.has("__meeting");
@@ -257,7 +258,7 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
       }
       const extras: string[] = [];
       if (keptTags.length > 0) {
-        extras.push(`tagged ${keptTags.map((t) => CLIENT_TAG_LABELS[t]).join(", ")}`);
+        extras.push(`tagged ${keptTags.map((t) => tagLabel(tagDefs, t)).join(", ")}`);
       }
       if (keepMeeting && suggestions.meetingDate) {
         extras.push(`booked ${formatMedium(suggestions.meetingDate)}`);
@@ -532,7 +533,7 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
                     }`}
                   >
                     {on ? "✓ " : "+ "}
-                    {CLIENT_TAG_LABELS[t]}
+                    {tagLabel(tagDefs, t)}
                   </button>
                 );
               })}

@@ -8,7 +8,7 @@ import { Link, useParams } from "react-router-dom";
 import { useApp } from "../lib/store";
 import { clientScore, modelFor } from "../engine/serviceEngine";
 import { addDays, formatLong, formatMedium, formatShort } from "../lib/dates";
-import { CLIENT_TAG_LABELS, FAMILY_ROLE_LABELS, TOUCH_AUTHOR_LABELS } from "../types";
+import { FAMILY_ROLE_LABELS, TOUCH_AUTHOR_LABELS, tagLabel } from "../types";
 import { AdvisorChip, DuePhrase, HeldAwayBadge, TierBadge, TypeChip } from "../components/badges";
 import { EmptyState } from "../components/EmptyState";
 import { PhoneLink } from "../components/PhoneLink";
@@ -165,7 +165,7 @@ export function MeetingPrep() {
             {client.tags.map((t) => (
               <li key={t} className="flex items-center gap-2 text-sm">
                 <span className="size-1.5 shrink-0 rounded-full bg-pine-600" />
-                <span className="font-medium">{CLIENT_TAG_LABELS[t]}</span>
+                <span className="font-medium">{tagLabel(data.clientTags, t)}</span>
               </li>
             ))}
           </ul>

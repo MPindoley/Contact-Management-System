@@ -6,31 +6,8 @@
 // for a book of business — it is predictable. The same words always produce the
 // same suggestion, and the advisor confirms before anything is saved.
 
-import { CLIENT_TAG_LABELS, type ClientTag } from "../types";
+import { sortedTags, type ClientTag, type ClientTagDef } from "../types";
 import { addDays } from "./dates";
-
-/** Phrases that imply a tag. Lower-case; matched on word boundaries. */
-const TAG_PHRASES: Record<ClientTag, string[]> = {
-  roth_conversion: ["roth", "roth conversion", "convert to roth", "backdoor roth"],
-  side_fund: ["side fund", "side account", "side money", "sidefund"],
-  ltc_insurance: ["long term care", "long-term care", "ltc", "nursing home", "home health care"],
-  money_due: [
-    "money due", "money owed", "held away", "held-away", "outside money",
-    "money to capture", "old 401k", "old 401(k)", "orphan account",
-  ],
-  life_insurance: ["life insurance", "term life", "whole life", "death benefit", "iul"],
-  college_529: ["529", "college fund", "college savings", "tuition", "education savings"],
-  estate_beneficiary: [
-    "estate plan", "estate planning", "beneficiary", "beneficiaries",
-    "living trust", "revocable trust", "power of attorney", "will update", "update the will",
-  ],
-  tax_planning: [
-    "tax planning", "tax strategy", "capital gains", "tax loss", "tax-loss",
-    "harvest", "cpa", "taxable income", "bracket",
-  ],
-  annuity_review: ["annuity", "annuities"],
-  rmd: ["rmd", "required minimum", "required minimum distribution"],
-};
 
 const MONTHS = [
   "january", "february", "march", "april", "may", "june",
@@ -64,20 +41,54 @@ function mentions(haystack: string, phrase: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${escape(phrase)}([^a-z0-9]|$)`, "i").test(haystack);
 }
 
-export function suggestTags(note: string, existing: ClientTag[] = []): ClientTag[] {
+/**
+ * Which tags a note mentions, in display order.
+ *
+ * The keywords come from the firm's own tag definitions, so a tag created in
+ * the app suggests itself from the moment it has a keyword — no code change.
+ *
+ * Overlapping keywords are the interesting case. "Roth IRA" matches a bare
+ * "roth" and "Roth Conversion" matches "roth conversion", so the note "went
+ * through the roth conversion" would naively offer both. The rule: if every
+ * phrase that matched for a tag is contained inside a longer phrase that
+ * matched for a DIFFERENT tag, the more specific tag wins and the broader one
+ * is dropped. That falls out of the data, so it works for tags the firm adds
+ * later without anyone thinking about it.
+ */
+export function suggestTags(
+  note: string,
+  existing: ClientTag[] = [],
+  defs: ClientTagDef[] = [],
+): ClientTag[] {
   const text = note.toLowerCase();
   if (!text.trim()) return [];
   const have = new Set(existing);
-  const out: ClientTag[] = [];
-  for (const tag of Object.keys(TAG_PHRASES) as ClientTag[]) {
-    if (have.has(tag)) continue;
-    if (TAG_PHRASES[tag].some((p) => mentions(text, p))) out.push(tag);
+
+  // Match EVERY tag first, including ones the household already carries: a tag
+  // it has is still evidence about the text, and dropping it early would let a
+  // broader tag through that the specific one should have shadowed. ("Roth
+  // conversion again" on a household already tagged Roth Conversion must not
+  // then offer Roth IRA off the bare "roth".)
+  const hits: Array<{ tag: ClientTag; phrases: string[] }> = [];
+  for (const def of sortedTags(defs)) {
+    const phrases = def.keywords.filter((p) => mentions(text, p));
+    if (phrases.length > 0) hits.push({ tag: def.id, phrases });
   }
-  // Stable, human order: the order the tags are declared in.
-  return out.sort(
-    (a, b) =>
-      Object.keys(CLIENT_TAG_LABELS).indexOf(a) - Object.keys(CLIENT_TAG_LABELS).indexOf(b),
-  );
+
+  const longest = (ps: string[]) => ps.reduce((n, p) => Math.max(n, p.length), 0);
+  return hits
+    .filter(({ tag, phrases }) =>
+      // Keep unless something more specific from another tag subsumes all of
+      // this tag's matches.
+      !hits.some(
+        (other) =>
+          other.tag !== tag &&
+          longest(other.phrases) > longest(phrases) &&
+          phrases.every((p) => other.phrases.some((q) => q !== p && q.includes(p))),
+      ),
+    )
+    .map((h) => h.tag)
+    .filter((tag) => !have.has(tag));
 }
 
 /** ISO date for the given year/month(0-11)/day, clamped to the month's length. */
@@ -169,10 +180,11 @@ export function suggestFromNote(
   note: string,
   existing: ClientTag[],
   today: string,
+  defs: ClientTagDef[] = [],
 ): NoteSuggestions {
   const when = suggestMeetingDate(note, today);
   return {
-    tags: suggestTags(note, existing),
+    tags: suggestTags(note, existing, defs),
     meetingDate: when?.date ?? null,
     meetingPhrase: when?.phrase ?? null,
   };

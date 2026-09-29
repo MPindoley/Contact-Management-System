@@ -626,3 +626,99 @@ describe("demo adapter — who a touch mirrors to", () => {
     expect(after.contactEvents.length).toBe(before.contactEvents.length + 1);
   });
 });
+
+// Opportunity tags are config the firm owns, not a hardcoded list.
+describe("demo adapter — the firm's own opportunity tags", () => {
+  it("starts with the built-in set, Roth IRA included", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    const snap = await adapter.load();
+    expect(snap.clientTags.length).toBeGreaterThan(0);
+    expect(snap.clientTags.map((t) => t.id)).toContain("roth_conversion");
+    expect(snap.clientTags.map((t) => t.id)).toContain("roth_ira");
+  });
+
+  it("adds a tag, deriving a stable id from the label", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    await adapter.load();
+    const after = await adapter.addClientTag({
+      label: "HSA Funding",
+      keywords: ["HSA", " Health Savings "],
+    });
+    const tag = after.clientTags.find((t) => t.id === "hsa_funding");
+    expect(tag).toBeDefined();
+    expect(tag!.label).toBe("HSA Funding");
+    // Stored lower-case and trimmed, because that is how they're matched.
+    expect(tag!.keywords).toEqual(["hsa", "health savings"]);
+  });
+
+  it("refuses a duplicate name rather than shadowing the existing tag", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    await adapter.load();
+    await expect(
+      adapter.addClientTag({ label: "Roth Conversion", keywords: [] }),
+    ).rejects.toThrow(/already a tag/);
+  });
+
+  it("refuses a name with nothing to slug", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    await adapter.load();
+    await expect(adapter.addClientTag({ label: "   ", keywords: [] })).rejects.toThrow();
+    await expect(adapter.addClientTag({ label: "!!!", keywords: [] })).rejects.toThrow(/letters/);
+  });
+
+  it("renaming keeps the id, so households keep the tag", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    const before = await adapter.load();
+    const holder = before.clients.find((c) => c.tags.includes("roth_conversion"))!;
+    expect(holder).toBeDefined();
+
+    const after = await adapter.updateClientTag("roth_conversion", {
+      label: "Roth Conversion Opportunity",
+    });
+    expect(after.clientTags.find((t) => t.id === "roth_conversion")!.label).toBe(
+      "Roth Conversion Opportunity",
+    );
+    expect(after.clients.find((c) => c.id === holder.id)!.tags).toContain("roth_conversion");
+  });
+
+  it("edits the keywords a note listens for", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    await adapter.load();
+    const after = await adapter.updateClientTag("rmd", { keywords: ["rmd", "distribution"] });
+    expect(after.clientTags.find((t) => t.id === "rmd")!.keywords).toEqual(["rmd", "distribution"]);
+  });
+
+  it("deleting a tag takes it off every household carrying it", async () => {
+    const adapter = createDemoAdapter(memoryStorage());
+    const before = await adapter.load();
+    const holders = before.clients.filter((c) => c.tags.includes("roth_conversion"));
+    expect(holders.length).toBeGreaterThan(0);
+
+    const after = await adapter.deleteClientTag("roth_conversion");
+    expect(after.clientTags.some((t) => t.id === "roth_conversion")).toBe(false);
+    // No household is left carrying an id with no definition behind it.
+    expect(after.clients.every((c) => !c.tags.includes("roth_conversion"))).toBe(true);
+    // ...and nothing else was disturbed.
+    for (const h of holders) {
+      const now = after.clients.find((c) => c.id === h.id)!;
+      expect(now.tags).toEqual(h.tags.filter((t) => t !== "roth_conversion"));
+    }
+  });
+
+  it("survives a snapshot saved before tags were data", async () => {
+    // An advisor's browser still holds last week's localStorage. Without a
+    // backfill, clientTags is undefined and the whole app throws on load.
+    const storage = memoryStorage();
+    const adapter = createDemoAdapter(storage);
+    const seeded = await adapter.load();
+    const stale = JSON.parse(storage.getItem("relationship-hub-demo-v1")!);
+    delete stale.snapshot.clientTags;
+    for (const c of stale.snapshot.clients) delete c.mirrorTouches;
+    storage.setItem("relationship-hub-demo-v1", JSON.stringify(stale));
+
+    const reopened = await createDemoAdapter(storage).load();
+    expect(reopened.clientTags.length).toBe(seeded.clientTags.length);
+    // mirrorTouches defaults on; left undefined it would read as "never mirror".
+    expect(reopened.clients.every((c) => c.mirrorTouches === true)).toBe(true);
+  });
+});

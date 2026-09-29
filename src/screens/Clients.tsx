@@ -9,8 +9,7 @@ import { clientScore } from "../engine/serviceEngine";
 import { outreachCandidates } from "../engine/outreach";
 import {
   ADVISOR_LABELS,
-  CLIENT_TAGS,
-  CLIENT_TAG_LABELS,
+  sortedTags,
   TIERS,
   TIER_RANK,
   clientMatchesTagSearch,
@@ -33,6 +32,7 @@ type ClientSortKey = "household" | "tier" | "score";
 
 export function Clients() {
   const { data, today, currentUser } = useApp();
+  const tagDefs = useMemo(() => sortedTags(data?.clientTags ?? []), [data]);
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const [planning, setPlanning] = useState(false);
@@ -93,7 +93,7 @@ export function Clients() {
         (c) =>
           !q ||
           c.householdName.toLowerCase().includes(q) ||
-          clientMatchesTagSearch(c.tags, q),
+          clientMatchesTagSearch(c.tags, q, tagDefs),
       )
       .map((client) => ({
         client,
@@ -255,9 +255,9 @@ export function Clients() {
             aria-label="Filter by opportunity tag"
           >
             <option value="all">All opportunities</option>
-            {CLIENT_TAGS.map((t) => (
-              <option key={t} value={t}>
-                {CLIENT_TAG_LABELS[t]}
+            {tagDefs.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
               </option>
             ))}
           </Select>

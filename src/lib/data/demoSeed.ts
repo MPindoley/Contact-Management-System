@@ -4,6 +4,7 @@
 // things on the horizon. Deterministic (seeded PRNG), so resets are stable.
 
 import type { AdvisorAssignment, AdvisorKey, Client, ClientTag, ContactEvent, ContactType, DataSnapshot, Family, Prospect, ProspectEvent, ServiceModel, Tier, User } from "../../types";
+import { DEFAULT_CLIENT_TAGS } from "../../types";
 import { addDays } from "../dates";
 import { computeClientDueDates, rebuildAllTasks } from "../../engine/serviceEngine";
 
@@ -230,6 +231,7 @@ export function buildDemoSnapshot(today: string): DataSnapshot {
     prospects,
     prospectEvents,
     families,
+    clientTags: DEFAULT_CLIENT_TAGS.map((t) => ({ ...t, keywords: [...t.keywords] })),
   };
 }
 

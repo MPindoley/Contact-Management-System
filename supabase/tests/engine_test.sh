@@ -465,5 +465,58 @@ begin
   assert found, 'a non-mirroring household still runs its own clock';
 end $$;
 
+-- --------------------------------------------------------------------------
+-- client_tags: the firm's own opportunity tags. Config, not code. The ids are
+-- what clients.tags already stores, so seeding must not disturb a household.
+-- --------------------------------------------------------------------------
+do $$
+declare n int;
+begin
+  select count(*) into n from client_tags;
+  assert n >= 11, 'the built-in tags are seeded, got ' || n;
+
+  -- The ids households already carry must exist.
+  foreach n in array array[1] loop null; end loop;  -- (no-op, keeps plpgsql happy)
+  perform 1 from client_tags where id = 'roth_conversion';
+  assert found, 'roth_conversion survives';
+  perform 1 from client_tags where id = 'roth_ira';
+  assert found, 'roth_ira is seeded -- the tag this change was asked for';
+
+  -- Keywords drive the note suggester and are matched lower-case.
+  select count(*) into n from client_tags where exists (
+    select 1 from unnest(keywords) k where k <> lower(k)
+  );
+  assert n = 0, 'every seeded keyword is lower-case, got ' || n || ' that are not';
+
+  -- Roth Conversion must NOT own a bare "roth": that belongs to Roth IRA, and
+  -- the app's specificity rule relies on the longer phrase being the only one.
+  select count(*) into n from client_tags
+    where id = 'roth_conversion' and 'roth' = any (keywords);
+  assert n = 0, 'roth_conversion does not claim a bare "roth"';
+end $$;
+
+-- A tag a firm adds itself behaves like any other: no enum, no code change.
+insert into client_tags (id, label, keywords, sort_order)
+  values ('hsa_funding', 'HSA Funding', array['hsa','health savings'], 99);
+
+insert into clients (id, household_name, assigned_advisor, tier, tags)
+  values ('99999999-9999-9999-9999-000000000040', 'Tagged Household', 'matt', 'B',
+          array['hsa_funding','roth_ira']);
+
+do $$
+declare n int;
+begin
+  select count(*) into n from clients
+    where id = '99999999-9999-9999-9999-000000000040' and 'hsa_funding' = any (tags);
+  assert n = 1, 'a household carries a firm-created tag';
+
+  -- clients.tags has no foreign key on purpose: deleting a definition must
+  -- never be blocked by, or cascade into, client rows.
+  delete from client_tags where id = 'hsa_funding';
+  select count(*) into n from clients
+    where id = '99999999-9999-9999-9999-000000000040' and 'hsa_funding' = any (tags);
+  assert n = 1, 'deleting the definition does not touch the household row';
+end $$;
+
 select 'ALL_SQL_ASSERTIONS_PASSED' as result;
 SQL

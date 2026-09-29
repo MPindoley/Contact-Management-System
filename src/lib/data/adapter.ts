@@ -1,5 +1,6 @@
 import type {
   AddClientInput,
+  AddClientTagInput,
   AddProspectInput,
   DataSnapshot,
   FamilyRole,
@@ -9,6 +10,7 @@ import type {
   Tier,
   TouchType,
   UpdateClientInput,
+  UpdateClientTagInput,
   UpdateContactInput,
   UpdateProspectInput,
 } from "../../types";
@@ -48,6 +50,13 @@ export interface DataAdapter {
   /** Permanently delete a household and all its contact history. */
   deleteClient(clientId: string): Promise<DataSnapshot>;
   updateServiceModel(model: ServiceModel): Promise<DataSnapshot>;
+
+  // --- Opportunity tags (firm-wide config, like service models) ---
+  /** Create a tag. The id is derived from the label and never changes after. */
+  addClientTag(input: AddClientTagInput): Promise<DataSnapshot>;
+  updateClientTag(id: string, patch: UpdateClientTagInput): Promise<DataSnapshot>;
+  /** Delete a tag and strip it from every household carrying it. */
+  deleteClientTag(id: string): Promise<DataSnapshot>;
   /** Apply tier assignments in bulk (used by re-tier from criteria). */
   bulkSetTiers(assignments: Array<{ clientId: string; tier: Tier }>): Promise<DataSnapshot>;
 

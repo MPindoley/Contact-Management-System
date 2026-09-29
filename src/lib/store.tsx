@@ -14,6 +14,7 @@ import {
 } from "react";
 import type {
   AddClientInput,
+  AddClientTagInput,
   AddProspectInput,
   Client,
   DataSnapshot,
@@ -26,6 +27,7 @@ import type {
   Tier,
   TouchType,
   UpdateClientInput,
+  UpdateClientTagInput,
   UpdateContactInput,
   UpdateProspectInput,
   User,
@@ -86,6 +88,9 @@ interface AppContextValue {
   renameFamily(familyId: string, name: string): Promise<void>;
   autoLinkBySurname(): Promise<void>;
   updateServiceModel(model: ServiceModel): Promise<void>;
+  addClientTag(input: AddClientTagInput): Promise<void>;
+  updateClientTag(id: string, patch: UpdateClientTagInput): Promise<void>;
+  deleteClientTag(id: string): Promise<void>;
   bulkSetTiers(assignments: Array<{ clientId: string; tier: Tier }>): Promise<void>;
   addProspect(input: AddProspectInput): Promise<Prospect | null>;
   updateProspect(prospectId: string, patch: UpdateProspectInput): Promise<void>;
@@ -419,6 +424,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, run],
   );
 
+  const addClientTag = useCallback(
+    (input: AddClientTagInput) => run(() => adapter.addClientTag(input)),
+    [adapter, run],
+  );
+
+  const updateClientTag = useCallback(
+    (id: string, patch: UpdateClientTagInput) => run(() => adapter.updateClientTag(id, patch)),
+    [adapter, run],
+  );
+
+  const deleteClientTag = useCallback(
+    (id: string) => run(() => adapter.deleteClientTag(id)),
+    [adapter, run],
+  );
+
   const bulkSetTiers = useCallback(
     (assignments: Array<{ clientId: string; tier: Tier }>) =>
       run(() => adapter.bulkSetTiers(assignments)),
@@ -502,6 +522,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       renameFamily,
       autoLinkBySurname,
       updateServiceModel,
+      addClientTag,
+      updateClientTag,
+      deleteClientTag,
       bulkSetTiers,
       addProspect,
       updateProspect,
@@ -518,6 +541,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       logContact, addClient, importClients, updateContactEvent, deleteContactEvent, snoozeTouch,
       planOutreach, updateClient, scheduleMeeting, clearScheduledMeeting, deleteClient,
       linkFamily, unlinkFromFamily, catchUpHousehold, renameFamily, autoLinkBySurname, updateServiceModel,
+      addClientTag, updateClientTag, deleteClientTag,
       addProspect, updateProspect, deleteProspect, logProspectContact, deleteProspectEvent,
       rebuildQueue, adminResetPassword, resetDemo,
     ],
