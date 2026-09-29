@@ -106,6 +106,21 @@ create table service_models (
 );
 
 -- ---------------------------------------------------------------------------
+-- client_tags — the firm's opportunity tags. Config, not code: editable in the
+-- app, matched against dictated notes via `keywords`. clients.tags holds these
+-- ids as plain text with no foreign key, so a tag can be renamed or removed
+-- without touching a client row.
+-- ---------------------------------------------------------------------------
+create table client_tags (
+  id         text primary key,
+  label      text not null,
+  keywords   text[] not null default '{}',
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
 -- contact_events — the heart of the system. Every completed touch logs here.
 -- 'admin' touches are recorded but never reset the service clock.
 -- ---------------------------------------------------------------------------
@@ -433,6 +448,7 @@ end $$;
 
 create trigger clients_touch        before update on clients        for each row execute function set_updated_at();
 create trigger service_models_touch before update on service_models for each row execute function set_updated_at();
+create trigger client_tags_touch before update on client_tags for each row execute function set_updated_at();
 create trigger prospects_touch      before update on prospects      for each row execute function set_updated_at();
 create trigger families_touch       before update on families       for each row execute function set_updated_at();
 
@@ -505,6 +521,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 alter table users          enable row level security;
+alter table client_tags    enable row level security;
 alter table clients        enable row level security;
 alter table service_models enable row level security;
 alter table contact_events enable row level security;
@@ -518,6 +535,7 @@ alter table families         enable row level security;
 create policy "authenticated read users"   on users          for select to authenticated using (true);
 create policy "authenticated update users" on users          for update to authenticated using (true) with check (true);
 create policy "authenticated all models"   on service_models for all    to authenticated using (true) with check (true);
+create policy "authenticated all client tags" on client_tags for all  to authenticated using (true) with check (true);
 create policy "authenticated all families" on families       for all    to authenticated using (true) with check (true);
 
 -- Clients: scoped to the requester's books.
@@ -562,7 +580,7 @@ begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     alter publication supabase_realtime
       add table clients, contact_events, due_dates, tasks, service_models, users,
-                prospects, prospect_events, families;
+                prospects, prospect_events, families, client_tags;
   end if;
 end $$;
 
@@ -575,6 +593,31 @@ insert into service_models (tier, meeting_interval_days, call_interval_days, min
   ('A',  90,  30, 100000, 'Core high-value households.'),
   ('B', 365,  90,  25000, 'The steady middle of the book.'),
   ('C', 365, 180,   null, 'Lighter-touch relationships, kept warm.');
+
+insert into client_tags (id, label, keywords, sort_order) values
+  ('roth_conversion', 'Roth Conversion',
+   array['roth conversion','convert to roth','converting to roth','backdoor roth'], 0),
+  ('roth_ira', 'Roth IRA',
+   array['roth','roth ira','roth contribution','fund the roth','max out the roth',
+         'contribute to the roth','roth limit'], 1),
+  ('side_fund', 'Side Fund', array['side fund','side account','side money','sidefund'], 2),
+  ('ltc_insurance', 'Long-Term Care Insurance',
+   array['long term care','long-term care','ltc','nursing home','home health care'], 3),
+  ('money_due', 'Money Due',
+   array['money due','money owed','held away','held-away','outside money',
+         'money to capture','old 401k','old 401(k)','orphan account'], 4),
+  ('life_insurance', 'Life Insurance',
+   array['life insurance','term life','whole life','death benefit','iul'], 5),
+  ('college_529', '529 / College Funding',
+   array['529','college fund','college savings','tuition','education savings'], 6),
+  ('estate_beneficiary', 'Estate / Beneficiary Review',
+   array['estate plan','estate planning','beneficiary','beneficiaries','living trust',
+         'revocable trust','power of attorney','will update','update the will'], 7),
+  ('tax_planning', 'Tax Planning',
+   array['tax planning','tax strategy','capital gains','tax loss','tax-loss',
+         'harvest','cpa','taxable income','bracket'], 8),
+  ('annuity_review', 'Annuity Review', array['annuity','annuities'], 9),
+  ('rmd', 'RMD', array['rmd','required minimum','required minimum distribution'], 10);
 
 -- Set real emails before inviting people, so signups auto-link to profiles:
 --   update users set email = 'matt@yourfirm.com' where advisor_key = 'matt';

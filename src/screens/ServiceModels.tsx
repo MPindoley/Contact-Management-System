@@ -8,10 +8,12 @@ import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { annualRequired } from "../engine/serviceEngine";
 import { planRetier } from "../engine/retier";
-import type { ServiceModel, User } from "../types";
-import { TierBadge } from "../components/badges";
+import type { ClientTagDef, ServiceModel, User } from "../types";
+import { sortedTags } from "../types";
+import { TagChip, TierBadge } from "../components/badges";
 import { AdminResetModal } from "../components/AdminResetModal";
 import { Button, Field, Input, Spinner, Textarea } from "../components/ui";
+import { PlusIcon } from "../components/icons";
 
 function formatMoney(n: number | null): string {
   if (n === null) return "—";
@@ -49,6 +51,8 @@ export function ServiceModels() {
       </div>
 
       <RetierSection />
+
+      <TagsSection />
 
       <section className="card max-w-2xl p-5">
         <h2 className="text-sm font-semibold">The people</h2>
@@ -205,6 +209,227 @@ function ModelCard({ model }: { model: ServiceModel }) {
         {busy && <Spinner className="size-3.5 border-white/40 border-t-white" />}
         Save Tier {model.tier}
       </Button>
+    </form>
+  );
+}
+
+/**
+ * The firm's own opportunity tags. Everything here used to be a hardcoded list,
+ * so "we need one for Roth IRA" meant a code change; it's config now.
+ *
+ * Keywords are the interesting part: they're what the dictated-note suggester
+ * matches on, so a tag added here starts offering itself in Log Contact
+ * immediately.
+ */
+function TagsSection() {
+  const { data, addClientTag, updateClientTag, deleteClientTag, busy } = useApp();
+  const toast = useToast();
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  const tags = useMemo(() => sortedTags(data?.clientTags ?? []), [data]);
+  // How many households carry each tag — shown before you delete one.
+  const usage = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of data?.clients ?? []) {
+      for (const t of c.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return counts;
+  }, [data]);
+
+  async function remove(tag: ClientTagDef) {
+    setConfirmingId(null);
+    const used = usage.get(tag.id) ?? 0;
+    try {
+      await deleteClientTag(tag.id);
+      toast.push(
+        used > 0
+          ? `"${tag.label}" deleted and taken off ${used} ${used === 1 ? "household" : "households"}.`
+          : `"${tag.label}" deleted.`,
+        "info",
+      );
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Couldn't delete that tag.", "error");
+    }
+  }
+
+  return (
+    <section className="card max-w-2xl p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Opportunity tags</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+            What you flag on a household and search the book by. The keywords are what a dictated
+            note listens for — add “roth ira” here and every note that says it will offer the tag.
+          </p>
+        </div>
+        {!adding && (
+          <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
+            <PlusIcon className="size-4" />
+            New tag
+          </Button>
+        )}
+      </div>
+
+      {adding && (
+        <TagForm
+          onCancel={() => setAdding(false)}
+          onSave={async (label, keywords) => {
+            await addClientTag({ label, keywords });
+            setAdding(false);
+            toast.push(`"${label}" added — it's on the client form and the filters now.`);
+          }}
+        />
+      )}
+
+      <ul className="mt-3 divide-y divide-stone-100">
+        {tags.map((tag) => {
+          const used = usage.get(tag.id) ?? 0;
+          if (editingId === tag.id) {
+            return (
+              <li key={tag.id} className="py-2">
+                <TagForm
+                  initial={tag}
+                  onCancel={() => setEditingId(null)}
+                  onSave={async (label, keywords) => {
+                    await updateClientTag(tag.id, { label, keywords });
+                    setEditingId(null);
+                    toast.push(`"${label}" saved.`);
+                  }}
+                />
+              </li>
+            );
+          }
+          return (
+            <li key={tag.id} className="py-2.5">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TagChip tag={tag.id} />
+                    <span className="tnum text-xs text-stone-400">
+                      {used === 0 ? "unused" : `${used} ${used === 1 ? "household" : "households"}`}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+                    {tag.keywords.length === 0 ? (
+                      <span className="text-stone-400 italic">
+                        No keywords — tick this one by hand.
+                      </span>
+                    ) : (
+                      tag.keywords.join(" · ")
+                    )}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => setEditingId(tag.id)}>
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-clay-700 hover:bg-clay-50"
+                    onClick={() => setConfirmingId(tag.id)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+              {confirmingId === tag.id && (
+                <div className="mt-2 flex flex-col gap-2 rounded-lg border border-clay-200 bg-clay-50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-[13px] leading-snug text-clay-900">
+                    Delete “{tag.label}”?
+                    {used > 0
+                      ? ` It comes off ${used} ${used === 1 ? "household" : "households"} too.`
+                      : " Nothing is using it."}
+                  </span>
+                  <div className="flex shrink-0 justify-end gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmingId(null)}>
+                      Keep
+                    </Button>
+                    <Button size="sm" variant="danger" disabled={busy} onClick={() => void remove(tag)}>
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** Add or edit one tag. Keywords are entered comma-separated. */
+function TagForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: ClientTagDef;
+  onSave: (label: string, keywords: string[]) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const { busy } = useApp();
+  const toast = useToast();
+  const [label, setLabel] = useState(initial?.label ?? "");
+  const [keywords, setKeywords] = useState((initial?.keywords ?? []).join(", "));
+
+  async function submit() {
+    try {
+      await onSave(
+        label,
+        keywords
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+      );
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Couldn't save that tag.", "error");
+    }
+  }
+
+  return (
+    <form
+      className="mt-3 space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <Field label="Name">
+        <Input
+          autoFocus
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Roth IRA"
+        />
+      </Field>
+      <Field
+        label="Keywords a note should listen for"
+        hint="Comma-separated. Matched on whole words, so “529” won't fire inside “15290”. Leave blank to only ever tick it by hand."
+      >
+        <Input
+          value={keywords}
+          onChange={(e) => setKeywords(e.target.value)}
+          placeholder="roth ira, roth contribution, fund the roth"
+        />
+      </Field>
+      {initial && (
+        <p className="text-xs text-stone-400">
+          Renaming is safe — households keep the tag, they just show the new name.
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button variant="primary" type="submit" disabled={!label.trim() || busy}>
+          {busy && <Spinner className="size-3.5 border-white/40 border-t-white" />}
+          {initial ? "Save" : "Add tag"}
+        </Button>
+      </div>
     </form>
   );
 }

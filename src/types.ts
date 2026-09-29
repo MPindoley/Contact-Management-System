@@ -20,22 +20,34 @@ export type Priority = "high" | "medium" | "low";
 export type TaskStatus = "open" | "done";
 
 /**
- * Opportunity tags you can flag on a household — "there's a Roth conversion
- * here", "they need long-term care". Tick them on the client form, then search
- * or filter the book by them. To add one, add a line to CLIENT_TAGS below; the
- * form, search, filter and chips all pick it up automatically.
+ * An opportunity tag on a household — "there's a Roth conversion here", "they
+ * need long-term care". Just the id: the label and the keywords that suggest it
+ * live in a ClientTagDef row, so the firm can add its own without a code change.
+ *
+ * A plain string rather than a union for exactly that reason. Anything reading a
+ * tag has to tolerate an id it has no definition for (one deleted on another
+ * device, say) — tagLabel() below is the single place that decides what to show.
  */
-export type ClientTag =
-  | "roth_conversion"
-  | "side_fund"
-  | "ltc_insurance"
-  | "money_due"
-  | "life_insurance"
-  | "college_529"
-  | "estate_beneficiary"
-  | "tax_planning"
-  | "annuity_review"
-  | "rmd";
+export type ClientTag = string;
+
+/**
+ * The definition of an opportunity tag. Firm-wide config, like service models:
+ * editable in the app, stored in the database, seeded with the ten the firm
+ * started with.
+ */
+export interface ClientTagDef {
+  /** Slug stored on clients.tags. Never changes once created. */
+  id: ClientTag;
+  label: string;
+  /**
+   * Phrases that imply this tag when they appear in a dictated note. Lower
+   * case; matched on word boundaries. Empty means "never suggest, only tick
+   * by hand".
+   */
+  keywords: string[];
+  /** Position in the picker and in suggestion output. */
+  sortOrder: number;
+}
 
 export interface User {
   id: string;
@@ -184,6 +196,7 @@ export interface DataSnapshot {
   prospects: Prospect[];
   prospectEvents: ProspectEvent[];
   families: Family[];
+  clientTags: ClientTagDef[];
 }
 
 export interface AddProspectInput {
@@ -261,6 +274,17 @@ export interface UpdateContactInput {
   notes?: string | null;
 }
 
+export interface AddClientTagInput {
+  label: string;
+  keywords: string[];
+}
+
+export interface UpdateClientTagInput {
+  label?: string;
+  keywords?: string[];
+  sortOrder?: number;
+}
+
 export interface AddClientInput {
   householdName: string;
   assignedAdvisor: AdvisorAssignment;
@@ -322,29 +346,120 @@ export const ADVISOR_LABELS: Record<AdvisorAssignment, string> = {
 };
 
 /**
- * The opportunity tags, in the order they appear on the client form.
- * Add or rename freely — everything else follows from this list.
+ * The tags every firm starts with, and the phrases that suggest them. Seeded
+ * into the database on first run and fully editable from then on — this array
+ * is a starting point, not the canonical list. The canonical list is whatever
+ * is in `client_tags`.
+ *
+ * The ids must never change: they are what is already stored on clients.tags.
  */
-export const CLIENT_TAG_LABELS: Record<ClientTag, string> = {
-  roth_conversion: "Roth Conversion",
-  side_fund: "Side Fund",
-  ltc_insurance: "Long-Term Care Insurance",
-  money_due: "Money Due",
-  life_insurance: "Life Insurance",
-  college_529: "529 / College Funding",
-  estate_beneficiary: "Estate / Beneficiary Review",
-  tax_planning: "Tax Planning",
-  annuity_review: "Annuity Review",
-  rmd: "RMD",
-};
+export const DEFAULT_CLIENT_TAGS: ClientTagDef[] = [
+  {
+    id: "roth_conversion",
+    label: "Roth Conversion",
+    // Deliberately NOT a bare "roth" — that belongs to the Roth IRA tag, and
+    // the suggester's specificity rule keeps the longer phrase from dragging
+    // the shorter one in with it.
+    keywords: ["roth conversion", "convert to roth", "converting to roth", "backdoor roth"],
+    sortOrder: 0,
+  },
+  {
+    id: "roth_ira",
+    label: "Roth IRA",
+    keywords: [
+      "roth", "roth ira", "roth contribution", "fund the roth", "max out the roth",
+      "contribute to the roth", "roth limit",
+    ],
+    sortOrder: 1,
+  },
+  { id: "side_fund", label: "Side Fund", keywords: ["side fund", "side account", "side money", "sidefund"], sortOrder: 2 },
+  {
+    id: "ltc_insurance",
+    label: "Long-Term Care Insurance",
+    keywords: ["long term care", "long-term care", "ltc", "nursing home", "home health care"],
+    sortOrder: 3,
+  },
+  {
+    id: "money_due",
+    label: "Money Due",
+    keywords: [
+      "money due", "money owed", "held away", "held-away", "outside money",
+      "money to capture", "old 401k", "old 401(k)", "orphan account",
+    ],
+    sortOrder: 4,
+  },
+  {
+    id: "life_insurance",
+    label: "Life Insurance",
+    keywords: ["life insurance", "term life", "whole life", "death benefit", "iul"],
+    sortOrder: 5,
+  },
+  {
+    id: "college_529",
+    label: "529 / College Funding",
+    keywords: ["529", "college fund", "college savings", "tuition", "education savings"],
+    sortOrder: 6,
+  },
+  {
+    id: "estate_beneficiary",
+    label: "Estate / Beneficiary Review",
+    keywords: [
+      "estate plan", "estate planning", "beneficiary", "beneficiaries",
+      "living trust", "revocable trust", "power of attorney", "will update", "update the will",
+    ],
+    sortOrder: 7,
+  },
+  {
+    id: "tax_planning",
+    label: "Tax Planning",
+    keywords: [
+      "tax planning", "tax strategy", "capital gains", "tax loss", "tax-loss",
+      "harvest", "cpa", "taxable income", "bracket",
+    ],
+    sortOrder: 8,
+  },
+  { id: "annuity_review", label: "Annuity Review", keywords: ["annuity", "annuities"], sortOrder: 9 },
+  { id: "rmd", label: "RMD", keywords: ["rmd", "required minimum", "required minimum distribution"], sortOrder: 10 },
+];
 
-export const CLIENT_TAGS = Object.keys(CLIENT_TAG_LABELS) as ClientTag[];
+/** Definitions in display order. */
+export function sortedTags(defs: ClientTagDef[]): ClientTagDef[] {
+  return [...defs].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+}
+
+/**
+ * What to show for a tag id. A household can carry an id whose definition was
+ * deleted on another device, so rather than render blank we humanise the slug:
+ * "roth_ira" reads as "Roth Ira", which is recognisable enough to fix.
+ */
+export function tagLabel(defs: ClientTagDef[], id: ClientTag): string {
+  const found = defs.find((d) => d.id === id);
+  if (found) return found.label;
+  return id
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/** Turn a label into an id: "Roth IRA" -> "roth_ira". */
+export function slugifyTag(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48);
+}
 
 /** Does this household match a free-text search of its tags? */
-export function clientMatchesTagSearch(tags: ClientTag[], query: string): boolean {
+export function clientMatchesTagSearch(
+  tags: ClientTag[],
+  query: string,
+  defs: ClientTagDef[],
+): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return false;
-  return tags.some((t) => CLIENT_TAG_LABELS[t]?.toLowerCase().includes(q));
+  return tags.some((t) => tagLabel(defs, t).toLowerCase().includes(q));
 }
 
 export const CONTACT_TYPE_LABELS: Record<ContactType, string> = {

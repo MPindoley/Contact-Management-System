@@ -74,6 +74,7 @@ describe("scopeSnapshot", () => {
       { id: "pe2", prospectId: "pb", advisor: "advisor_b", type: "call", eventDate: "2026-06-01", notes: null, createdAt: "" },
     ],
     families: [{ id: "fam-m", name: "Matt Family", createdAt: "" }],
+    clientTags: [],
   };
 
   it("hides Matt's clients (and everything off them) from Beau", () => {

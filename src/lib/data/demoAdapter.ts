@@ -5,6 +5,7 @@
 
 import type {
   AddClientInput,
+  AddClientTagInput,
   AddProspectInput,
   Client,
   ContactEvent,
@@ -17,10 +18,11 @@ import type {
   Tier,
   TouchType,
   UpdateClientInput,
+  UpdateClientTagInput,
   UpdateContactInput,
   UpdateProspectInput,
 } from "../../types";
-import { isMeaningfulContact } from "../../types";
+import { DEFAULT_CLIENT_TAGS, isMeaningfulContact, slugifyTag } from "../../types";
 import type { DataAdapter } from "./adapter";
 import { todayISO } from "../dates";
 import {
@@ -46,6 +48,20 @@ interface PersistedState {
   snapshot: DataSnapshot;
   /** Date of the last simulated 6am rebuild. */
   lastRebuilt: string;
+}
+
+/** Keywords are matched lower-case, so they are stored that way: trimmed,
+ *  de-duplicated, blanks dropped. */
+function normaliseKeywords(raw: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of raw) {
+    const v = k.trim().toLowerCase();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
 }
 
 function clone<T>(value: T): T {
@@ -85,7 +101,40 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       state = seed();
       persist();
     }
+    if (backfill(state.snapshot)) persist();
     return state;
+  }
+
+  /**
+   * A snapshot persisted by an older build is missing whatever has been added
+   * since. Fill those gaps on load rather than letting a `undefined.length`
+   * take the whole app down. Returns true if anything changed.
+   */
+  function backfill(snapshot: DataSnapshot): boolean {
+    let changed = false;
+    if (!Array.isArray(snapshot.clientTags) || snapshot.clientTags.length === 0) {
+      snapshot.clientTags = DEFAULT_CLIENT_TAGS.map((t) => ({ ...t, keywords: [...t.keywords] }));
+      changed = true;
+    }
+    for (const client of snapshot.clients) {
+      if (typeof client.mirrorTouches !== "boolean") {
+        // Absent means the snapshot predates the rule, and the rule's default
+        // is on. Left undefined it would read as "never mirror".
+        client.mirrorTouches = true;
+        changed = true;
+      }
+      if (!Array.isArray(client.tags)) {
+        client.tags = [];
+        changed = true;
+      }
+    }
+    for (const event of snapshot.contactEvents) {
+      if (event.groupId === undefined) {
+        event.groupId = null;
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   /** Simulate the nightly cron: first load of a new day re-ages the queue. */
@@ -541,6 +590,54 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       // The rules changed — the whole book reflows.
       for (const client of s.snapshot.clients) recomputeClient(client.id);
       rebuild(todayISO());
+      return snapshot();
+    },
+
+    async addClientTag(input: AddClientTagInput) {
+      const s = ensureLoaded();
+      const label = input.label.trim();
+      if (!label) throw new Error("Give the tag a name.");
+      const id = slugifyTag(label);
+      if (!id) throw new Error("That name has no letters or numbers in it.");
+      if (s.snapshot.clientTags.some((t) => t.id === id)) {
+        throw new Error(`There's already a tag called "${label}".`);
+      }
+      const nextOrder = s.snapshot.clientTags.reduce((n, t) => Math.max(n, t.sortOrder), -1) + 1;
+      s.snapshot.clientTags.push({
+        id,
+        label,
+        keywords: normaliseKeywords(input.keywords),
+        sortOrder: nextOrder,
+      });
+      persist();
+      return snapshot();
+    },
+
+    async updateClientTag(id: string, patch: UpdateClientTagInput) {
+      const s = ensureLoaded();
+      const tag = s.snapshot.clientTags.find((t) => t.id === id);
+      if (!tag) throw new Error("That tag no longer exists — reload and try again.");
+      if (patch.label !== undefined) {
+        const label = patch.label.trim();
+        if (!label) throw new Error("Give the tag a name.");
+        // The id is what households store, so renaming never re-slugs it.
+        tag.label = label;
+      }
+      if (patch.keywords !== undefined) tag.keywords = normaliseKeywords(patch.keywords);
+      if (patch.sortOrder !== undefined) tag.sortOrder = patch.sortOrder;
+      persist();
+      return snapshot();
+    },
+
+    async deleteClientTag(id: string) {
+      const s = ensureLoaded();
+      s.snapshot.clientTags = s.snapshot.clientTags.filter((t) => t.id !== id);
+      // Leaving the id on households would render it as a humanised slug
+      // forever, so it comes off them in the same action.
+      for (const client of s.snapshot.clients) {
+        if (client.tags.includes(id)) client.tags = client.tags.filter((t) => t !== id);
+      }
+      persist();
       return snapshot();
     },
 
