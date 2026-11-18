@@ -8,7 +8,9 @@
 #
 # So this harness synthesises the real situation: a database from before the
 # table existed, then the upgrade migrations on top, exercised as the
-# `authenticated` role rather than as superuser.
+# `authenticated` role rather than as superuser. It does the same for 0013
+# (meetings cover the calls): a database with history, bookings and snoozes
+# from before the change, then 0013 on top, then 0013 again.
 #
 #   ./supabase/tests/upgrade_test.sh   (needs a local postgres service)
 set -euo pipefail
@@ -123,5 +125,129 @@ end $$;
 drop table probe_future;
 SQL
 echo "default privileges cover tables added later"
+
+# ============================================================================
+# 0013: meetings cover the calls, on a live database.
+# ----------------------------------------------------------------------------
+# Synthesise a database as it was on 0012: today's schema with the column
+# taken back out and the recompute function from 0002 (the one live databases
+# run until 0013) put back. Then real-looking history, with snoozes and
+# bookings set the way the app sets them, then 0013 on top.
+# ============================================================================
+DB=rh_upgrade_0013
+sudo -u postgres psql -qc "drop database if exists $DB;"
+sudo -u postgres psql -qc "create database $DB;"
+run <<'SQL'
+create schema auth;
+create table auth.users (id uuid primary key, email text);
+do $$ begin if not exists (select from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;
+create or replace function auth.uid() returns uuid
+language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
+grant usage on schema auth to authenticated;
+grant execute on function auth.uid() to authenticated;
+SQL
+run -f "$(pwd)/supabase/migrations/0001_init.sql" > /dev/null
+python3 - <<'PY'
+import re
+s = open("supabase/migrations/0002_upgrade.sql").read()
+m = re.search(r"create or replace function fn_recompute_client_due_dates.*?\nend \$\$;\n", s, re.S)
+open("/tmp/fn_recompute_0002.sql", "w").write(m.group(0))
+PY
+run -c "alter table service_models drop column meetings_cover_calls;" > /dev/null
+run -f /tmp/fn_recompute_0002.sql > /dev/null
+
+run <<'SQL'
+-- U1, B: two meetings this year and an overdue call. U2, A: one meeting and
+-- the next one booked. U3, C: a voicemail's "try again" on its call. U4: a
+-- first-outreach placeholder.
+insert into clients (id, household_name, assigned_advisor, tier) values
+  ('dddd0000-0000-0000-0000-000000000001', 'U1', 'matt', 'B'),
+  ('dddd0000-0000-0000-0000-000000000002', 'U2', 'matt', 'A'),
+  ('dddd0000-0000-0000-0000-000000000003', 'U3', 'matt', 'C'),
+  ('dddd0000-0000-0000-0000-000000000004', 'U4', 'matt', 'B');
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('dddd0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 200),
+  ('dddd0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 20),
+  ('dddd0000-0000-0000-0000-000000000001', 'matt', 'call',    current_date - 100),
+  ('dddd0000-0000-0000-0000-000000000002', 'matt', 'meeting', current_date - 100),
+  ('dddd0000-0000-0000-0000-000000000002', 'matt', 'call',    current_date - 40),
+  ('dddd0000-0000-0000-0000-000000000003', 'matt', 'call',    current_date - 200);
+update clients set next_meeting_date = current_date + 20 where id = 'dddd0000-0000-0000-0000-000000000002';
+select snooze_touch('dddd0000-0000-0000-0000-000000000002', 'meeting', current_date + 20);
+select snooze_touch('dddd0000-0000-0000-0000-000000000003', 'call',    current_date + 3);
+select plan_outreach('[{"client_id":"dddd0000-0000-0000-0000-000000000004","due_date":"2030-01-01"}]'::jsonb);
+
+do $$
+declare n int;
+begin
+  select count(*) into n from tasks
+   where client_id = 'dddd0000-0000-0000-0000-000000000001' and type = 'call' and status = 'open';
+  assert n = 1, 'before 0013 U1 has an overdue call on the queue';
+end $$;
+SQL
+
+run -f "$(pwd)/supabase/migrations/0013_meetings_cover_calls.sql" > /dev/null
+
+check_0013() {
+run <<'SQL'
+do $$
+declare d record; n int;
+begin
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000001' and type = 'call';
+  assert d.due_date = current_date - 200 + 365, 'U1 call now waits on its meetings, got ' || d.due_date;
+  select count(*) into n from tasks
+   where client_id = 'dddd0000-0000-0000-0000-000000000001' and type = 'call' and status = 'open';
+  assert n = 0, 'and is off the queue';
+
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000002' and type = 'meeting';
+  assert d.snoozed_until = current_date + 20, 'the migration keeps U2''s booked meeting, got ' || coalesce(d.snoozed_until::text, 'null');
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000002' and type = 'call';
+  assert d.due_date = current_date - 10, 'U2 has one meeting: calls still due, got ' || d.due_date;
+
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000003' and type = 'call';
+  assert d.snoozed_until = current_date + 3, 'the migration keeps U3''s voicemail snooze';
+  assert d.due_date = current_date - 20, 'U3 call unchanged, got ' || d.due_date;
+
+  select count(*) into n from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000004' and computed_from_event_id is null;
+  assert n = 1, 'the outreach placeholder survives';
+end $$;
+SQL
+}
+check_0013
+run <<'SQL'
+do $$
+declare n int;
+begin
+  select count(*) into n from service_models where meetings_cover_calls = 2;
+  assert n = 4, '0013 turns it on for S, A, B and C, got ' || n;
+end $$;
+SQL
+echo "0013 reflows the book and keeps bookings, snoozes and placeholders"
+
+# Re-running changes nothing, and never turns a tier back on.
+run -c "update service_models set meetings_cover_calls = null where tier = 'C';" > /dev/null
+run -f "$(pwd)/supabase/migrations/0013_meetings_cover_calls.sql" > /dev/null
+check_0013
+run <<'SQL'
+do $$
+declare v int;
+begin
+  select meetings_cover_calls into v from service_models where tier = 'C';
+  assert v is null, 'a re-run leaves a tier the owner turned off, off';
+  select meetings_cover_calls into v from service_models where tier = 'B';
+  assert v = 2, 'and the rest on';
+end $$;
+SQL
+echo "0013 is safe to re-run"
+
+# The app saves the toggle as the signed-in user.
+run <<'SQL'
+set role authenticated;
+select set_config('test.uid', '00000000-0000-0000-0000-000000000001', false);
+update service_models set meetings_cover_calls = null where tier = 'B';
+update service_models set meetings_cover_calls = 2 where tier = 'B';
+reset role;
+SQL
+echo "authenticated can turn it off and on"
 
 echo "ALL_UPGRADE_ASSERTIONS_PASSED"

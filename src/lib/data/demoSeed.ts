@@ -15,11 +15,13 @@ export const DEMO_USERS: User[] = [
   { id: "user_assistant", name: "Carolyn", email: "carolyn@demo.firm", role: "assistant", advisorKey: null, seesAllBooks: true },
 ];
 
+// meetingsCoverCalls: 2 on every tier — the owner's rule is "if I meet with
+// them twice in the year, that fulfils the call requirement", C included.
 export const DEFAULT_SERVICE_MODELS: ServiceModel[] = [
-  { tier: "S", meetingIntervalDays: 90, callIntervalDays: 30, minRevenue: 250000, description: "Your very top households — the relationships you protect above all." },
-  { tier: "A", meetingIntervalDays: 90, callIntervalDays: 30, minRevenue: 100000, description: "Core high-value households." },
-  { tier: "B", meetingIntervalDays: 365, callIntervalDays: 90, minRevenue: 25000, description: "The steady middle of the book." },
-  { tier: "C", meetingIntervalDays: 365, callIntervalDays: 180, minRevenue: null, description: "Lighter-touch relationships, kept warm." },
+  { tier: "S", meetingIntervalDays: 90, callIntervalDays: 30, minRevenue: 250000, description: "Your very top households — the relationships you protect above all.", meetingsCoverCalls: 2 },
+  { tier: "A", meetingIntervalDays: 90, callIntervalDays: 30, minRevenue: 100000, description: "Core high-value households.", meetingsCoverCalls: 2 },
+  { tier: "B", meetingIntervalDays: 365, callIntervalDays: 90, minRevenue: 25000, description: "The steady middle of the book.", meetingsCoverCalls: 2 },
+  { tier: "C", meetingIntervalDays: 365, callIntervalDays: 180, minRevenue: null, description: "Lighter-touch relationships, kept warm.", meetingsCoverCalls: 2 },
 ];
 
 interface SeedSpec {

@@ -518,5 +518,225 @@ begin
   assert n = 1, 'deleting the definition does not touch the household row';
 end $$;
 
+-- --------------------------------------------------------------------------
+-- Meetings cover the calls (0013). Two meetings on different days within a
+-- year meet the call requirement: the call isn't due until the older of the
+-- two is a year old. Mirrors src/engine/meetingsCoverCalls.test.ts.
+-- --------------------------------------------------------------------------
+do $$
+declare n int;
+begin
+  select count(*) into n from service_models where meetings_cover_calls = 2;
+  assert n = 4, 'on for S, A, B and C out of the box, got ' || n;
+end $$;
+
+-- (An earlier case moved B's calls to 45 days; put the default back.)
+update service_models set call_interval_days = 90 where tier = 'B';
+
+-- B household: meetings 200 and 20 days ago, last call 100 days ago.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('cccc0000-0000-0000-0000-000000000001', 'Covered B', 'matt', 'B');
+insert into contact_events (id, client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-0000000000a1', 'cccc0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 200),
+  ('cccc0000-0000-0000-0000-0000000000a2', 'cccc0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 20),
+  ('cccc0000-0000-0000-0000-0000000000a3', 'cccc0000-0000-0000-0000-000000000001', 'matt', 'call',    current_date - 100);
+
+do $$
+declare d record; n int;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000001' and type = 'call';
+  assert d.due_date = current_date - 200 + 365, 'call waits for the older meeting to turn a year, got ' || d.due_date;
+  assert d.computed_from_event_id = 'cccc0000-0000-0000-0000-0000000000a1', 'sourced from the older meeting';
+  select count(*) into n from tasks
+    where client_id = 'cccc0000-0000-0000-0000-000000000001' and type = 'call' and status = 'open';
+  assert n = 0, 'a covered call is not on the queue';
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000001' and type = 'meeting';
+  assert d.due_date = current_date - 20 + 365, 'the meeting clock is untouched, got ' || d.due_date;
+end $$;
+
+-- Turning the rule off for B brings the call straight back.
+update service_models set meetings_cover_calls = null where tier = 'B';
+do $$
+declare d record; n int;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000001' and type = 'call';
+  assert d.due_date = current_date - 10, 'off: last call + 90, got ' || d.due_date;
+  assert d.computed_from_event_id = 'cccc0000-0000-0000-0000-0000000000a3', 'off: sourced from the call';
+  select count(*) into n from tasks
+    where client_id = 'cccc0000-0000-0000-0000-000000000001' and type = 'call' and status = 'open';
+  assert n = 1, 'off: the overdue call is back on the queue';
+end $$;
+
+-- Three meetings needed: two isn't enough.
+update service_models set meetings_cover_calls = 3 where tier = 'B';
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000001' and type = 'call';
+  assert d.due_date = current_date - 10, 'three needed, two held: not covered, got ' || d.due_date;
+end $$;
+update service_models set meetings_cover_calls = 2 where tier = 'B';
+
+-- Only 2..12 are accepted.
+do $$
+begin
+  begin
+    update service_models set meetings_cover_calls = 1 where tier = 'B';
+    assert false, 'meetings_cover_calls = 1 must be rejected';
+  exception when check_violation then null;
+  end;
+end $$;
+
+-- Deleting one of the two meetings ends the cover.
+delete from contact_events where id = 'cccc0000-0000-0000-0000-0000000000a1';
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000001' and type = 'call';
+  assert d.due_date = current_date - 10, 'one meeting left: back to the call cadence, got ' || d.due_date;
+  assert d.computed_from_event_id = 'cccc0000-0000-0000-0000-0000000000a3', 'sourced from the call again';
+end $$;
+
+-- Two meetings on the SAME day are one meeting.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('cccc0000-0000-0000-0000-000000000002', 'Same Day', 'matt', 'B');
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-000000000002', 'matt', 'meeting', current_date - 30),
+  ('cccc0000-0000-0000-0000-000000000002', 'matt', 'meeting', current_date - 30),
+  ('cccc0000-0000-0000-0000-000000000002', 'matt', 'call',    current_date - 100);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000002' and type = 'call';
+  assert d.due_date = current_date - 10, 'a same-day double is one meeting, got ' || d.due_date;
+end $$;
+
+-- Meetings but never a call: the rule never invents a call row.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('cccc0000-0000-0000-0000-000000000003', 'No Calls', 'matt', 'C');
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-000000000003', 'matt', 'meeting', current_date - 300),
+  ('cccc0000-0000-0000-0000-000000000003', 'matt', 'meeting', current_date - 10);
+do $$
+declare n int;
+begin
+  select count(*) into n from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000003' and type = 'call';
+  assert n = 0, 'no call ever logged means no call row, got ' || n;
+end $$;
+
+-- C applies too; a later call wins; a tie goes to the call.
+insert into contact_events (id, client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-0000000000c1', 'cccc0000-0000-0000-0000-000000000003', 'matt', 'call', current_date - 200);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000003' and type = 'call';
+  assert d.due_date = current_date + 65, 'C covered until the older meeting turns a year, got ' || d.due_date;
+end $$;
+-- Call 300 days ago + 180 = +65: exactly the cover's end. Tie → the call.
+update contact_events set event_date = current_date - 115 where id = 'cccc0000-0000-0000-0000-0000000000c1';
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000003' and type = 'call';
+  assert d.due_date = current_date + 65, 'tie keeps the date, got ' || d.due_date;
+  assert d.computed_from_event_id = 'cccc0000-0000-0000-0000-0000000000c1', 'a tie goes to the call';
+end $$;
+update contact_events set event_date = current_date - 5 where id = 'cccc0000-0000-0000-0000-0000000000c1';
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000003' and type = 'call';
+  assert d.due_date = current_date + 175, 'a later call wins, got ' || d.due_date;
+end $$;
+
+-- A meeting dated after the day it was logged (an import typo) never counts;
+-- an old meeting backfilled today does.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('cccc0000-0000-0000-0000-000000000004', 'Typo', 'matt', 'B');
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-000000000004', 'matt', 'meeting', current_date - 40),
+  ('cccc0000-0000-0000-0000-000000000004', 'matt', 'meeting', current_date + 300),
+  ('cccc0000-0000-0000-0000-000000000004', 'matt', 'call',    current_date - 100);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000004' and type = 'call';
+  assert d.due_date = current_date - 10, 'a future-dated meeting does not cover, got ' || d.due_date;
+end $$;
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-000000000004', 'matt', 'meeting', current_date - 150);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000004' and type = 'call';
+  assert d.due_date = current_date - 150 + 365, 'a backfilled meeting counts, got ' || d.due_date;
+end $$;
+
+-- Snoozes. A booked meeting survives logging a call (it used to be wiped).
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('cccc0000-0000-0000-0000-000000000005', 'Booked', 'matt', 'A');
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-000000000005', 'matt', 'meeting', current_date - 100),
+  ('cccc0000-0000-0000-0000-000000000005', 'matt', 'call',    current_date - 40);
+select snooze_touch('cccc0000-0000-0000-0000-000000000005', 'meeting', current_date + 20);
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('cccc0000-0000-0000-0000-000000000005', 'matt', 'call', current_date);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000005' and type = 'meeting';
+  assert d.snoozed_until = current_date + 20, 'logging a call keeps the booked meeting, got ' || coalesce(d.snoozed_until::text, 'null');
+end $$;
+-- A tier edit keeps it too.
+update service_models set call_interval_days = call_interval_days where tier = 'A';
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000005' and type = 'meeting';
+  assert d.snoozed_until = current_date + 20, 'a tier edit keeps the booked meeting';
+end $$;
+-- A voicemail's "try again in a week" on the call. Then the meeting happens:
+-- that clears the booking, and makes two meetings, so the calls are covered.
+-- The call row now comes from a meeting, and its snooze comes along (it only
+-- ever moved later). A fresh call after that keeps it too.
+select snooze_touch('cccc0000-0000-0000-0000-000000000005', 'call', current_date + 7);
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('cccc0000-0000-0000-0000-000000000005', 'matt', 'meeting', current_date);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000005' and type = 'call';
+  assert d.snoozed_until = current_date + 7, 'a call moving onto its cover keeps its snooze';
+end $$;
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('cccc0000-0000-0000-0000-000000000005', 'matt', 'call', current_date);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000005' and type = 'meeting';
+  assert d.snoozed_until is null, 'the meeting happening clears the booking';
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000005' and type = 'call';
+  assert d.due_date = current_date - 100 + 365, 'A covered until the older meeting turns a year, got ' || d.due_date;
+  assert d.snoozed_until = current_date + 7, 'a covered call keeps its snooze';
+end $$;
+
 select 'ALL_SQL_ASSERTIONS_PASSED' as result;
 SQL

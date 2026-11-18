@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
-import { annualRequired } from "../engine/serviceEngine";
+import { DEFAULT_MEETINGS_COVER_CALLS, annualRequired } from "../engine/serviceEngine";
 import { planRetier } from "../engine/retier";
 import type { ClientTagDef, ServiceModel, User } from "../types";
 import { sortedTags } from "../types";
@@ -106,12 +106,18 @@ export function ServiceModels() {
 }
 
 function ModelCard({ model }: { model: ServiceModel }) {
-  const { updateServiceModel, busy } = useApp();
+  const { data, updateServiceModel, busy } = useApp();
   const toast = useToast();
   const [meeting, setMeeting] = useState(String(model.meetingIntervalDays));
   const [call, setCall] = useState(String(model.callIntervalDays));
   const [minRevenue, setMinRevenue] = useState(model.minRevenue === null ? "" : String(model.minRevenue));
   const [description, setDescription] = useState(model.description ?? "");
+  // undefined = the database hasn't run migration 0013, so there's nothing to
+  // save it to yet.
+  const coverAvailable = model.meetingsCoverCalls !== undefined;
+  const coverWasOn = model.meetingsCoverCalls != null;
+  const coverCount = model.meetingsCoverCalls ?? DEFAULT_MEETINGS_COVER_CALLS;
+  const [cover, setCover] = useState(coverWasOn);
 
   const meetingNum = Number(meeting);
   const callNum = Number(call);
@@ -123,15 +129,29 @@ function ModelCard({ model }: { model: ServiceModel }) {
   const revValid = revNum === null || (Number.isFinite(revNum) && revNum >= 0);
   const valid = intervalsValid && revValid;
 
+  const coverChanged = coverAvailable && cover !== coverWasOn;
+
   const dirty =
     valid &&
     (meetingNum !== model.meetingIntervalDays ||
       callNum !== model.callIntervalDays ||
+      coverChanged ||
       revNum !== model.minRevenue ||
       (description.trim() || null) !== (model.description ?? null));
 
   const cadenceChanged =
-    meetingNum !== model.meetingIntervalDays || callNum !== model.callIntervalDays;
+    meetingNum !== model.meetingIntervalDays || callNum !== model.callIntervalDays || coverChanged;
+
+  // Turning it off: how many of this tier's households have their calls
+  // covered right now, and would get them back.
+  const uncovering = useMemo(() => {
+    if (!data || !coverWasOn || cover) return 0;
+    const meetingIds = new Set(data.contactEvents.filter((e) => e.type === "meeting").map((e) => e.id));
+    const inTier = new Set(data.clients.filter((c) => c.active && c.tier === model.tier).map((c) => c.id));
+    return data.dueDates.filter(
+      (d) => d.type === "call" && inTier.has(d.clientId) && d.computedFromEventId !== null && meetingIds.has(d.computedFromEventId),
+    ).length;
+  }, [data, coverWasOn, cover, model.tier]);
 
   const preview = intervalsValid
     ? annualRequired({ ...model, meetingIntervalDays: meetingNum, callIntervalDays: callNum })
@@ -143,6 +163,7 @@ function ModelCard({ model }: { model: ServiceModel }) {
         tier: model.tier,
         meetingIntervalDays: meetingNum,
         callIntervalDays: callNum,
+        meetingsCoverCalls: coverAvailable ? (cover ? coverCount : null) : undefined,
         minRevenue: revNum,
         description: description.trim() || null,
       });
@@ -198,6 +219,34 @@ function ModelCard({ model }: { model: ServiceModel }) {
         <Field label="Meaningful call every (days)">
           <Input type="number" min={1} max={1095} value={call} onChange={(e) => setCall(e.target.value)} />
         </Field>
+        <label
+          className={`flex items-start gap-2.5 select-none ${coverAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+        >
+          <input
+            type="checkbox"
+            checked={cover}
+            disabled={!coverAvailable}
+            onChange={(e) => setCover(e.target.checked)}
+            className="mt-0.5 size-4 cursor-pointer accent-emerald-700 disabled:cursor-not-allowed"
+          />
+          <span className="text-[13px] leading-snug text-ink">
+            <span className="font-medium">
+              {coverCount === 2 ? "Two" : coverCount} meetings in 12 months cover the calls
+            </span>
+            <span className="block text-xs text-stone-400">
+              {coverAvailable
+                ? "No call is due until the older meeting is a year old."
+                : "Run migration 0013 to turn this on."}
+            </span>
+          </span>
+        </label>
+        {uncovering > 0 && (
+          <p className="rounded-lg border border-gold-300 bg-gold-50 px-3 py-2 text-xs leading-snug text-gold-900">
+            Saving brings back the calls for {uncovering} Tier {model.tier}{" "}
+            {uncovering === 1 ? "household" : "households"} whose meetings cover them now. Some
+            may come back overdue.
+          </p>
+        )}
       </div>
 
       <p className="tnum mt-3 text-xs text-stone-400">

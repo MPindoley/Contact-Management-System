@@ -26,7 +26,7 @@ import { SCORE_DOT_STYLES, AdvisorChip, TierBadge, TypeChip } from "../component
 import { EmptyState } from "../components/EmptyState";
 import { Button } from "../components/ui";
 import { CheckCircleIcon } from "../components/icons";
-import { clientScore } from "../engine/serviceEngine";
+import { clientScore, coverThreshold } from "../engine/serviceEngine";
 import { downloadCsv } from "../lib/exportCsv";
 import { latestContactFor } from "../lib/selectors";
 
@@ -191,6 +191,7 @@ export function FirmReport() {
             <p className="mt-2 text-xs text-stone-400">
               Meeting every {model.meetingIntervalDays}d · call every {model.callIntervalDays}d ·{" "}
               {required.total} touches/yr each
+              {coverThreshold(model) !== null && ` · ${coverThreshold(model)} meetings cover the calls`}
             </p>
             <div className="mt-4 flex items-end justify-between">
               <span className="font-display text-3xl font-semibold">
@@ -218,8 +219,8 @@ export function FirmReport() {
             {report.monthCalls} meaningful {report.monthCalls === 1 ? "call" : "calls"}
           </p>
           <p className="mt-1 text-xs text-stone-400">
-            Target = the book's annual requirement ÷ 12, so a quiet month shows up before a quiet
-            quarter does.
+            Target = the book's annual requirement ÷ 12 (for a household whose meetings cover its
+            calls, just those meetings), so a quiet month shows up before a quiet quarter does.
           </p>
         </div>
 

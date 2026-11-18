@@ -26,6 +26,7 @@ import { DEFAULT_CLIENT_TAGS, isMeaningfulContact, slugifyTag } from "../../type
 import type { DataAdapter } from "./adapter";
 import { todayISO } from "../dates";
 import {
+  DEFAULT_MEETINGS_COVER_CALLS,
   computeClientDueDates,
   rebuildAllTasks,
   settleTasks,
@@ -101,7 +102,18 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
       state = seed();
       persist();
     }
+    // A snapshot saved before meetings-cover-calls existed has no setting on
+    // its tiers. Give them the default, then reflow the book once so its call
+    // dates follow the new rule — the same thing migration 0013 does to a live
+    // database.
+    const modelsPredateCover = state.snapshot.serviceModels.some(
+      (m) => m.meetingsCoverCalls === undefined,
+    );
     if (backfill(state.snapshot)) persist();
+    if (modelsPredateCover) {
+      for (const c of state.snapshot.clients) recomputeClient(c.id);
+      rebuild(todayISO());
+    }
     return state;
   }
 
@@ -112,6 +124,12 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
    */
   function backfill(snapshot: DataSnapshot): boolean {
     let changed = false;
+    for (const m of snapshot.serviceModels) {
+      if (m.meetingsCoverCalls === undefined) {
+        m.meetingsCoverCalls = DEFAULT_MEETINGS_COVER_CALLS;
+        changed = true;
+      }
+    }
     if (!Array.isArray(snapshot.clientTags) || snapshot.clientTags.length === 0) {
       snapshot.clientTags = DEFAULT_CLIENT_TAGS.map((t) => ({ ...t, keywords: [...t.keywords] }));
       changed = true;
@@ -157,7 +175,15 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
     const s = ensureLoaded();
     const client = s.snapshot.clients.find((c) => c.id === clientId);
     if (!client) return;
-    const fresh = computeClientDueDates(client, s.snapshot.contactEvents, s.snapshot.serviceModels);
+    // Pass the current rows so a snooze survives a recompute that doesn't
+    // change where the row comes from (see computeClientDueDates).
+    const fresh = computeClientDueDates(
+      client,
+      s.snapshot.contactEvents,
+      s.snapshot.serviceModels,
+      new Date().toISOString(),
+      s.snapshot.dueDates.filter((d) => d.clientId === clientId),
+    );
     // Preserve first-outreach placeholders (no source event) until the client
     // has been contacted for the first time; then the real cadence takes over.
     const hasContact = s.snapshot.contactEvents.some(
@@ -584,8 +610,16 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
 
     async updateServiceModel(model: ServiceModel) {
       const s = ensureLoaded();
+      // undefined means "not sent", so keep what's stored — the same as the
+      // Supabase adapter leaving the column out of its update.
       s.snapshot.serviceModels = s.snapshot.serviceModels.map((m) =>
-        m.tier === model.tier ? { ...model } : m,
+        m.tier === model.tier
+          ? {
+              ...model,
+              meetingsCoverCalls:
+                model.meetingsCoverCalls === undefined ? m.meetingsCoverCalls : model.meetingsCoverCalls,
+            }
+          : m,
       );
       // The rules changed — the whole book reflows.
       for (const client of s.snapshot.clients) recomputeClient(client.id);

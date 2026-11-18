@@ -136,12 +136,15 @@ describe("demo adapter — full service loop", () => {
     expect(callDue!.dueDate).toBe(addDays(lastCall, 30));
 
     // Tighten Tier A calls to weekly: every A call due date moves to last+7.
+    // Coverage off, so this pins the pure cadence reflow; meetings covering
+    // calls has its own tests below.
     const reflowed = await adapter.updateServiceModel({
       tier: "A",
       meetingIntervalDays: 90,
       callIntervalDays: 7,
       minRevenue: null,
       description: null,
+      meetingsCoverCalls: null,
     });
     for (const c of reflowed.clients.filter((x) => x.tier === "A")) {
       const due = reflowed.dueDates.find((d) => d.clientId === c.id && d.type === "call");
