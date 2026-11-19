@@ -111,15 +111,17 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
     );
     if (backfill(state.snapshot)) persist();
     if (modelsPredateCover) {
-      // Like 0013, first put back bookings the old engine un-parked: every
-      // recompute used to clear every snooze, booked meetings included.
+      for (const c of state.snapshot.clients) recomputeClient(c.id);
+      // Then, like 0013, put back bookings the old engine un-parked: every
+      // recompute used to clear every snooze, booked meetings included. After
+      // the recompute, because a same-day tie between two meetings can resolve
+      // differently now and clear the snooze one last time.
       const today = todayISO();
       for (const c of state.snapshot.clients) {
         if (!c.nextMeetingDate || c.nextMeetingDate <= today) continue;
         const row = state.snapshot.dueDates.find((d) => d.clientId === c.id && d.type === "meeting");
         if (row && (row.snoozedUntil === null || row.snoozedUntil <= today)) row.snoozedUntil = c.nextMeetingDate;
       }
-      for (const c of state.snapshot.clients) recomputeClient(c.id);
       rebuild(today);
     }
     return state;

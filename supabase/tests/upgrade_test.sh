@@ -167,7 +167,8 @@ insert into clients (id, household_name, assigned_advisor, tier) values
   ('dddd0000-0000-0000-0000-000000000003', 'U3', 'matt', 'C'),
   ('dddd0000-0000-0000-0000-000000000004', 'U4', 'matt', 'B'),
   ('dddd0000-0000-0000-0000-000000000005', 'U5', 'matt', 'A'),
-  ('dddd0000-0000-0000-0000-000000000006', 'U6', 'matt', 'A');
+  ('dddd0000-0000-0000-0000-000000000006', 'U6', 'matt', 'A'),
+  ('dddd0000-0000-0000-0000-000000000007', 'U7', 'matt', 'A');
 insert into contact_events (client_id, advisor, type, event_date) values
   ('dddd0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 200),
   ('dddd0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 20),
@@ -190,6 +191,19 @@ insert into contact_events (client_id, advisor, type, event_date)
   values ('dddd0000-0000-0000-0000-000000000005', 'matt', 'call', current_date);
 update clients set next_meeting_date = current_date - 3
  where id = 'dddd0000-0000-0000-0000-000000000006';
+
+-- U7: one sit-down logged twice in one go (same day, same created_at), and
+-- the next meeting booked. The old engine broke that tie arbitrarily; pin it
+-- to the lower id, which the new engine's id tie-break won't pick, so the
+-- recompute inside 0013 changes the row's source and clears the booking.
+insert into contact_events (id, client_id, advisor, type, event_date) values
+  ('dddd0000-0000-0000-0000-0000000000a1', 'dddd0000-0000-0000-0000-000000000007', 'matt',      'meeting', current_date - 85),
+  ('dddd0000-0000-0000-0000-0000000000a2', 'dddd0000-0000-0000-0000-000000000007', 'advisor_b', 'meeting', current_date - 85);
+update due_dates set computed_from_event_id = 'dddd0000-0000-0000-0000-0000000000a1'
+ where client_id = 'dddd0000-0000-0000-0000-000000000007' and type = 'meeting';
+update clients set next_meeting_date = current_date + 30
+ where id = 'dddd0000-0000-0000-0000-000000000007';
+select snooze_touch('dddd0000-0000-0000-0000-000000000007', 'meeting', current_date + 30);
 
 do $$
 declare n int; d record;
@@ -239,6 +253,13 @@ begin
 
   select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000006' and type = 'meeting';
   assert d.snoozed_until is null, 'a booking whose day has passed is left alone';
+
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000007' and type = 'meeting';
+  assert d.computed_from_event_id = 'dddd0000-0000-0000-0000-0000000000a2', 'the new tie-break moved U7''s source';
+  assert d.snoozed_until = current_date + 30, 'and U7''s booking still stands, got ' || coalesce(d.snoozed_until::text, 'null');
+  select count(*) into n from tasks
+   where client_id = 'dddd0000-0000-0000-0000-000000000007' and type = 'meeting' and status = 'open';
+  assert n = 0, 'so its meeting stays off the queue';
 end $$;
 SQL
 }

@@ -150,11 +150,18 @@ begin
      where table_schema = 'public' and table_name = 'service_models'
        and column_name = 'meetings_cover_calls'
   ) then
-    -- Put back the bookings the old engine already un-parked. Booking a
+    alter table service_models add column meetings_cover_calls int
+      check (meetings_cover_calls is null or meetings_cover_calls between 2 and 12);
+    update service_models set meetings_cover_calls = 2;
+
+    -- Then put back the bookings the old engine already un-parked. Booking a
     -- meeting sets clients.next_meeting_date and parks the meeting row until
     -- that day; the app has no way to un-park one without cancelling the
     -- booking, so a future booking with nothing parked (or a snooze that has
-    -- already run out) can only be the old bug's doing.
+    -- already run out) can only be the old bug's doing. This goes after the
+    -- recompute above, not before: where two meetings tie on date and time,
+    -- the recompute's new tie-break can pick the other one, which clears the
+    -- snooze one last time.
     update due_dates d
        set snoozed_until = c.next_meeting_date, updated_at = now()
       from clients c
@@ -162,10 +169,7 @@ begin
        and d.type = 'meeting'
        and c.next_meeting_date > current_date
        and (d.snoozed_until is null or d.snoozed_until <= current_date);
-
-    alter table service_models add column meetings_cover_calls int
-      check (meetings_cover_calls is null or meetings_cover_calls between 2 and 12);
-    update service_models set meetings_cover_calls = 2;
+    perform rebuild_tasks(current_date);
   end if;
 end $$;
 

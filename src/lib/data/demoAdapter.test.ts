@@ -741,11 +741,17 @@ describe("demo adapter — data saved before meetings covered calls", () => {
     const client = saved.snapshot.clients.find((c: { id: string }) => c.id === row.clientId);
     client.nextMeetingDate = booked;
     row.snoozedUntil = null;
+    // And one sit-down logged twice at the same moment, where the new
+    // tie-break picks the copy: the reflow changes the row's source, which
+    // clears its snooze one last time. The repair has to come after that.
+    const source = saved.snapshot.contactEvents.find((e: { id: string }) => e.id === row.computedFromEventId);
+    saved.snapshot.contactEvents.push({ ...source, id: `${source.id}~copy` });
     storage.setItem("relationship-hub-demo-v1", JSON.stringify(saved));
 
     const snap = await createDemoAdapter(storage).load();
     expect(snap.serviceModels.map((m) => m.meetingsCoverCalls)).toEqual([2, 2, 2, 2]);
     const after = snap.dueDates.find((d) => d.clientId === client.id && d.type === "meeting")!;
+    expect(after.computedFromEventId).toBe(`${source.id}~copy`);
     expect(after.snoozedUntil).toBe(booked);
     expect(
       snap.tasks.some((t) => t.clientId === client.id && t.type === "meeting" && t.status === "open"),
