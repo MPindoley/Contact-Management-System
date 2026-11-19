@@ -117,6 +117,29 @@ describe("callCover", () => {
     expect(callCover(c.id, events, model("B"))!.endsOn).toBe(addDays("2026-02-01", 365));
   });
 
+  it("needs the meetings within a year of each other", () => {
+    // March 2025 and May 2026 were never "two in a year".
+    const apart = ["2025-03-01", "2026-05-01"].map((d) => touch(c.id, "meeting", d));
+    expect(callCover(c.id, apart, model("B"))).toBeNull();
+    // 365 days apart is a day too many: the older one's year is over by the
+    // day of the newer. 364 days apart covers, for exactly one day.
+    const yearApart = ["2025-05-01", "2026-05-01"].map((d) => touch(c.id, "meeting", d));
+    expect(callCover(c.id, yearApart, model("B"))).toBeNull();
+    const justInside = ["2025-05-02", "2026-05-01"].map((d) => touch(c.id, "meeting", d));
+    expect(callCover(c.id, justInside, model("B"))!.endsOn).toBe("2026-05-02");
+  });
+
+  it("falls back to the latest pair that did fit, when the newest two don't", () => {
+    // Covered by March + June 2025 until March 2026. A meeting in November
+    // 2026 is too far from June 2025 to pair with it, so the cover still ran
+    // out in March 2026.
+    const events = ["2025-03-01", "2025-06-01", "2026-11-19"].map((d) => touch(c.id, "meeting", d));
+    const cover = callCover(c.id, events, model("B"))!;
+    expect(cover.endsOn).toBe(addDays("2025-03-01", 365));
+    expect(cover.sourceEventId).toBe(events[0].id);
+    expect(cover.meetingDates).toEqual(["2025-06-01", "2025-03-01"]);
+  });
+
   it("ignores calls, voicemails and admin touches", () => {
     const events = [
       touch(c.id, "meeting", "2026-03-01"),
@@ -245,6 +268,21 @@ describe("the call due date", () => {
     const meeting = meetingRow(computeClientDueDates(c, events, MODELS))!;
     expect(meeting.dueDate).toBe(addDays("2026-05-22", 365));
     expect(meeting.computedFromEventId).toBe(last.id);
+  });
+
+  it("a late meeting doesn't shorten how long an overdue call has been due", () => {
+    // Tier A: met March and June 2025, last call May 2025. The calls were
+    // covered until March 2026 and have been due since. Finally meeting them
+    // in November 2026 must not rewrite that to "due since June 2026".
+    const c = mkClient({ tier: "A" });
+    const before = [
+      touch(c.id, "meeting", "2025-03-01"),
+      touch(c.id, "meeting", "2025-06-01"),
+      touch(c.id, "call", "2025-05-15"),
+    ];
+    expect(callRow(computeClientDueDates(c, before, MODELS))!.dueDate).toBe("2026-03-01");
+    const after = [...before, touch(c.id, "meeting", "2026-11-19")];
+    expect(callRow(computeClientDueDates(c, after, MODELS))!.dueDate).toBe("2026-03-01");
   });
 
   it("falls back to the call cadence when a covering meeting is deleted", () => {

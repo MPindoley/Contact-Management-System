@@ -249,7 +249,10 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
           type === "meeting" &&
           !coveredBefore &&
           !!callRow?.computedFromEventId &&
-          !callEventIds.has(callRow.computedFromEventId);
+          !callEventIds.has(callRow.computedFromEventId) &&
+          // A backdated meeting can complete a cover that has already run
+          // out; that's history, not news.
+          callRow.dueDate > today;
         toast.push(
           (next
             ? `${CONTACT_TYPE_LABELS[type]} logged${covering} — next ${type} for ${selected.householdName} due ${formatMedium(next.dueDate)}.`

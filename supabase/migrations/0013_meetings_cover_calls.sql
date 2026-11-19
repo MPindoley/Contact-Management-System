@@ -13,7 +13,8 @@
 --
 -- Also fixed here: logging a call used to un-book a booked meeting (and any
 -- tier edit un-parked the whole book), because every recompute cleared every
--- snooze. Now a snooze only clears when a new contact of its own type lands.
+-- snooze. Now a snooze only clears when a new contact of its own type lands,
+-- and the first run puts back the bookings that were already un-parked.
 -- ============================================================================
 begin;
 
@@ -28,7 +29,7 @@ declare
   v_n         int;                     -- meetings_cover_calls; null = off
   v_lm_id     uuid; v_lm_date  date;   -- latest meeting
   v_lc_id     uuid; v_lc_date  date;   -- latest call
-  v_nth_id    uuid; v_nth_date date;   -- Nth most recent distinct meeting day
+  v_old_id    uuid; v_old_date date;   -- oldest meeting of the latest covering run
   v_cover_end date;                    -- the day the meetings stop covering the calls
   v_call_due  date; v_call_src uuid; v_call_covered boolean := false;
 begin
@@ -54,25 +55,29 @@ begin
    order by e.event_date desc, e.created_at desc, e.id desc
    limit 1;
 
-  -- Meetings cover the calls (callCover() in TypeScript): if the household's N
-  -- most recent meetings, on distinct days, are all within a year, the calls
-  -- are taken care of until the oldest of those N is a year old. A meeting
-  -- dated after the day it was logged (a CSV typo) never counts. 365 is
-  -- SCORE_WINDOW_DAYS, the same window the service score uses, so the call
+  -- Meetings cover the calls (callCover() in TypeScript): N meetings on
+  -- distinct days, within a year of each other, take care of the calls until
+  -- the oldest of them is a year old. The latest such run of N wins; usually
+  -- the N most recent, but not when those are more than a year apart. A
+  -- meeting dated after the day it was logged (a CSV typo) never counts. 365
+  -- is SCORE_WINDOW_DAYS, the same window the service score uses, so the call
   -- comes back onto the queue the same day the score stops crediting it.
   if v_n between 2 and 12 then
-    select x.id, x.event_date into v_nth_id, v_nth_date
-      from (select distinct on (e.event_date) e.id, e.event_date
-              from contact_events e
-             where e.client_id = p_client
-               and e.type = 'meeting'
-               and e.event_date <= (e.created_at at time zone 'utc')::date
-             order by e.event_date desc, e.created_at desc, e.id desc) x
-     order by x.event_date desc
-    offset v_n - 1
+    select w.id, w.event_date into v_old_id, v_old_date
+      from (select x.id, x.event_date,
+                   -- the newest day of the run of N that starts at this one
+                   lead(x.event_date, v_n - 1) over (order by x.event_date) as run_newest
+              from (select distinct on (e.event_date) e.id, e.event_date
+                      from contact_events e
+                     where e.client_id = p_client
+                       and e.type = 'meeting'
+                       and e.event_date <= (e.created_at at time zone 'utc')::date
+                     order by e.event_date desc, e.created_at desc, e.id desc) x) w
+     where w.event_date + 365 > w.run_newest
+     order by w.event_date desc
      limit 1;
-    if v_nth_id is not null then
-      v_cover_end := v_nth_date + 365;
+    if v_old_id is not null then
+      v_cover_end := v_old_date + 365;
     end if;
   end if;
 
@@ -82,7 +87,7 @@ begin
   -- never creates one.
   if v_lc_id is not null then
     if v_cover_end is not null and v_cover_end > v_lc_date + v_ci then
-      v_call_due := v_cover_end;       v_call_src := v_nth_id;  v_call_covered := true;
+      v_call_due := v_cover_end;       v_call_src := v_old_id;  v_call_covered := true;
     else
       v_call_due := v_lc_date + v_ci;  v_call_src := v_lc_id;
     end if;
@@ -145,6 +150,19 @@ begin
      where table_schema = 'public' and table_name = 'service_models'
        and column_name = 'meetings_cover_calls'
   ) then
+    -- Put back the bookings the old engine already un-parked. Booking a
+    -- meeting sets clients.next_meeting_date and parks the meeting row until
+    -- that day; the app has no way to un-park one without cancelling the
+    -- booking, so a future booking with nothing parked (or a snooze that has
+    -- already run out) can only be the old bug's doing.
+    update due_dates d
+       set snoozed_until = c.next_meeting_date, updated_at = now()
+      from clients c
+     where c.id = d.client_id
+       and d.type = 'meeting'
+       and c.next_meeting_date > current_date
+       and (d.snoozed_until is null or d.snoozed_until <= current_date);
+
     alter table service_models add column meetings_cover_calls int
       check (meetings_cover_calls is null or meetings_cover_calls between 2 and 12);
     update service_models set meetings_cover_calls = 2;

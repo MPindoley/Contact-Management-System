@@ -131,13 +131,15 @@ describe.skipIf(!DB)("due dates: TypeScript and Postgres agree", () => {
           // year after, at an arbitrary time of day.
           insert(type, date, addDays(date, r.next() < 0.5 ? r.pick([-1, 0, 0, 1]) : r.int(-30, 400)));
         } else if (roll < 0.47) {
-          // Two recent meetings and a call that comes due around the cover's
-          // end: before it (covered), on the day (the tie, which goes to the
-          // call) or after it (the call wins).
+          // Two later meetings and a call that comes due around the first
+          // one's cover end: before it (covered), on the day (the tie, which
+          // goes to the call) or after it (the call wins).
           const ci = models.find((m) => m.tier === c.tier)!.callIntervalDays;
           const latest = [...events.filter((e) => e.clientId === c.id).map((e) => e.eventDate), addDays(BASE, -400)].sort().pop()!;
           const first = addDays(latest, r.int(1, 30));
-          const second = addDays(first, r.int(1, 200));
+          // Usually well inside a year; sometimes right on the edge (364 days
+          // still pairs, 365 doesn't), sometimes too far apart to pair at all.
+          const second = addDays(first, r.pick([r.int(1, 200), r.int(1, 200), 364, 365, r.int(366, 500)]));
           const call = addDays(first, 365 - ci + r.pick([-90, -1, 0, 0, 1]));
           insert("meeting", first, addDays(second, 1));
           insert("meeting", second, addDays(second, 1));

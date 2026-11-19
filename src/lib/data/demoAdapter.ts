@@ -111,8 +111,16 @@ export function createDemoAdapter(storage?: StorageLike): DataAdapter {
     );
     if (backfill(state.snapshot)) persist();
     if (modelsPredateCover) {
+      // Like 0013, first put back bookings the old engine un-parked: every
+      // recompute used to clear every snooze, booked meetings included.
+      const today = todayISO();
+      for (const c of state.snapshot.clients) {
+        if (!c.nextMeetingDate || c.nextMeetingDate <= today) continue;
+        const row = state.snapshot.dueDates.find((d) => d.clientId === c.id && d.type === "meeting");
+        if (row && (row.snoozedUntil === null || row.snoozedUntil <= today)) row.snoozedUntil = c.nextMeetingDate;
+      }
       for (const c of state.snapshot.clients) recomputeClient(c.id);
-      rebuild(todayISO());
+      rebuild(today);
     }
     return state;
   }

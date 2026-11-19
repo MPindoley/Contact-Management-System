@@ -105,18 +105,25 @@ function utcDay(timestamp: string): string {
 }
 
 export interface CallCover {
-  /** The day the covering meetings stop covering: the Nth-latest meeting + 365. */
+  /** The day the covering meetings stop covering: the oldest of them + 365. */
   endsOn: string;
-  /** The Nth-latest meeting — the one whose ageing-out ends the cover. */
+  /** The oldest covering meeting: the one whose ageing-out ends the cover. */
   sourceEventId: string;
   /** The N covering meeting dates, newest first. */
   meetingDates: string[];
 }
 
 /**
- * When a tier lets meetings cover its calls: if the household's N most recent
- * meetings (on distinct days) are all within a year, the calls are taken care
- * of until the oldest of those N turns a year old.
+ * When a tier lets meetings cover its calls: N meetings (on distinct days)
+ * within 12 months of each other take care of the calls until the oldest of
+ * them turns a year old.
+ *
+ * The latest such run of N meetings wins. Usually that is simply the N most
+ * recent, but not when they are more than a year apart: meetings in March
+ * 2025 and November 2026 were never "two in a year", so they cover nothing,
+ * and an earlier pair that did fit still dates when the cover ran out. (Taking
+ * the N most recent regardless would let a late meeting quietly shorten how
+ * long an overdue call had been overdue.)
  *
  * Distinct days, not rows: a meeting logged twice by mistake, or by Matt and
  * Beau for the same sit-down, is still one meeting.
@@ -141,14 +148,18 @@ export function callCover(
     if (!current || isLater(e, current)) byDate.set(e.eventDate, e);
   }
   const dates = [...byDate.keys()].sort().reverse();
-  if (dates.length < n) return null;
 
-  const nth = byDate.get(dates[n - 1])!;
-  return {
-    endsOn: addDays(nth.eventDate, SCORE_WINDOW_DAYS),
-    sourceEventId: nth.id,
-    meetingDates: dates.slice(0, n),
-  };
+  // dates[i] is the newest of a run of n days, dates[i + n - 1] the oldest.
+  // The run fits in a year when the oldest's year isn't over by the day of the
+  // newest.
+  for (let i = 0; i + n - 1 < dates.length; i++) {
+    const oldest = byDate.get(dates[i + n - 1])!;
+    const endsOn = addDays(oldest.eventDate, SCORE_WINDOW_DAYS);
+    if (endsOn > dates[i]) {
+      return { endsOn, sourceEventId: oldest.id, meetingDates: dates.slice(i, i + n) };
+    }
+  }
+  return null;
 }
 
 /**

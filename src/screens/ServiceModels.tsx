@@ -46,7 +46,22 @@ export function ServiceModels() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {data.serviceModels.map((model) => (
-          <ModelCard key={model.tier} model={model} />
+          // Keyed on what's stored, not just the tier: when the stored model
+          // changes underneath an open screen (a teammate's save arriving over
+          // realtime, or migration 0013 adding the setting), the card starts
+          // over from the new values instead of keeping stale ones that the
+          // next save would write back.
+          <ModelCard
+            key={[
+              model.tier,
+              model.meetingIntervalDays,
+              model.callIntervalDays,
+              String(model.meetingsCoverCalls),
+              model.minRevenue,
+              model.description,
+            ].join("|")}
+            model={model}
+          />
         ))}
       </div>
 
@@ -106,7 +121,7 @@ export function ServiceModels() {
 }
 
 function ModelCard({ model }: { model: ServiceModel }) {
-  const { data, updateServiceModel, busy } = useApp();
+  const { data, currentUser, updateServiceModel, busy, today } = useApp();
   const toast = useToast();
   const [meeting, setMeeting] = useState(String(model.meetingIntervalDays));
   const [call, setCall] = useState(String(model.callIntervalDays));
@@ -143,15 +158,25 @@ function ModelCard({ model }: { model: ServiceModel }) {
     meetingNum !== model.meetingIntervalDays || callNum !== model.callIntervalDays || coverChanged;
 
   // Turning it off: how many of this tier's households have their calls
-  // covered right now, and would get them back.
+  // covered right now, and would get them back. A row still pointing at a
+  // meeting after its cover ran out is already back on the queue: not counted.
+  const turningOff = coverWasOn && !cover;
   const uncovering = useMemo(() => {
-    if (!data || !coverWasOn || cover) return 0;
+    if (!data || !turningOff) return 0;
     const meetingIds = new Set(data.contactEvents.filter((e) => e.type === "meeting").map((e) => e.id));
     const inTier = new Set(data.clients.filter((c) => c.active && c.tier === model.tier).map((c) => c.id));
     return data.dueDates.filter(
-      (d) => d.type === "call" && inTier.has(d.clientId) && d.computedFromEventId !== null && meetingIds.has(d.computedFromEventId),
+      (d) =>
+        d.type === "call" &&
+        d.dueDate > today &&
+        inTier.has(d.clientId) &&
+        d.computedFromEventId !== null &&
+        meetingIds.has(d.computedFromEventId),
     ).length;
-  }, [data, coverWasOn, cover, model.tier]);
+  }, [data, turningOff, model.tier, today]);
+  // An advisor who only sees their own book can't count everyone else's, but
+  // the setting is firm-wide. (Same test as clientVisibleTo.)
+  const seesWholeFirm = Boolean(currentUser?.seesAllBooks);
 
   const preview = intervalsValid
     ? annualRequired({ ...model, meetingIntervalDays: meetingNum, callIntervalDays: callNum })
@@ -240,11 +265,11 @@ function ModelCard({ model }: { model: ServiceModel }) {
             </span>
           </span>
         </label>
-        {uncovering > 0 && (
+        {turningOff && (uncovering > 0 || !seesWholeFirm) && (
           <p className="rounded-lg border border-gold-300 bg-gold-50 px-3 py-2 text-xs leading-snug text-gold-900">
-            Saving brings back the calls for {uncovering} Tier {model.tier}{" "}
-            {uncovering === 1 ? "household" : "households"} whose meetings cover them now. Some
-            may come back overdue.
+            {seesWholeFirm
+              ? `Saving brings back the calls for ${uncovering} Tier ${model.tier} ${uncovering === 1 ? "household" : "households"} whose meetings cover them now. Some may come back overdue.`
+              : `Saving brings back the calls that meetings are covering for Tier ${model.tier} households in every advisor's book, not just yours. Some may come back overdue.`}
           </p>
         )}
       </div>

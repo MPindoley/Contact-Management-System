@@ -24,7 +24,9 @@ If your database already has the original schema (and data), **don't** re-run
 `0001_init.sql` — it uses `create table` and would error. Instead apply the
 incremental upgrade files **in order**, in the SQL editor. Each is idempotent
 (safe to re-run), so when you get a newer build just run the ones you haven't
-yet:
+yet. Don't go back and re-run an older file after a newer one, though: it can
+put back what the newer one replaced (re-running 0002 after 0013, for example,
+restores the old due-date engine).
 
 | File | Adds |
 | --- | --- |

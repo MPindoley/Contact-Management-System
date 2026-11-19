@@ -159,12 +159,15 @@ run -f /tmp/fn_recompute_0002.sql > /dev/null
 run <<'SQL'
 -- U1, B: two meetings this year and an overdue call. U2, A: one meeting and
 -- the next one booked. U3, C: a voicemail's "try again" on its call. U4: a
--- first-outreach placeholder.
+-- first-outreach placeholder. U5, A: booked, then a call logged, which under
+-- the old engine un-parks the booking. U6, A: a booking whose day has passed.
 insert into clients (id, household_name, assigned_advisor, tier) values
   ('dddd0000-0000-0000-0000-000000000001', 'U1', 'matt', 'B'),
   ('dddd0000-0000-0000-0000-000000000002', 'U2', 'matt', 'A'),
   ('dddd0000-0000-0000-0000-000000000003', 'U3', 'matt', 'C'),
-  ('dddd0000-0000-0000-0000-000000000004', 'U4', 'matt', 'B');
+  ('dddd0000-0000-0000-0000-000000000004', 'U4', 'matt', 'B'),
+  ('dddd0000-0000-0000-0000-000000000005', 'U5', 'matt', 'A'),
+  ('dddd0000-0000-0000-0000-000000000006', 'U6', 'matt', 'A');
 insert into contact_events (client_id, advisor, type, event_date) values
   ('dddd0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 200),
   ('dddd0000-0000-0000-0000-000000000001', 'matt', 'meeting', current_date - 20),
@@ -177,12 +180,29 @@ select snooze_touch('dddd0000-0000-0000-0000-000000000002', 'meeting', current_d
 select snooze_touch('dddd0000-0000-0000-0000-000000000003', 'call',    current_date + 3);
 select plan_outreach('[{"client_id":"dddd0000-0000-0000-0000-000000000004","due_date":"2030-01-01"}]'::jsonb);
 
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('dddd0000-0000-0000-0000-000000000005', 'matt', 'meeting', current_date - 100),
+  ('dddd0000-0000-0000-0000-000000000006', 'matt', 'meeting', current_date - 100);
+update clients set next_meeting_date = current_date + 9
+ where id = 'dddd0000-0000-0000-0000-000000000005';
+select snooze_touch('dddd0000-0000-0000-0000-000000000005', 'meeting', current_date + 9);
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('dddd0000-0000-0000-0000-000000000005', 'matt', 'call', current_date);
+update clients set next_meeting_date = current_date - 3
+ where id = 'dddd0000-0000-0000-0000-000000000006';
+
 do $$
-declare n int;
+declare n int; d record;
 begin
   select count(*) into n from tasks
    where client_id = 'dddd0000-0000-0000-0000-000000000001' and type = 'call' and status = 'open';
   assert n = 1, 'before 0013 U1 has an overdue call on the queue';
+  -- The old bug, reproduced: logging U5's call un-parked its booked meeting.
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000005' and type = 'meeting';
+  assert d.snoozed_until is null, 'before 0013 the call un-parked U5''s booking';
+  select count(*) into n from tasks
+   where client_id = 'dddd0000-0000-0000-0000-000000000005' and type = 'meeting' and status = 'open';
+  assert n = 1, 'so its booked meeting is back on the queue';
 end $$;
 SQL
 
@@ -210,6 +230,15 @@ begin
 
   select count(*) into n from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000004' and computed_from_event_id is null;
   assert n = 1, 'the outreach placeholder survives';
+
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000005' and type = 'meeting';
+  assert d.snoozed_until = current_date + 9, '0013 puts back U5''s booking, got ' || coalesce(d.snoozed_until::text, 'null');
+  select count(*) into n from tasks
+   where client_id = 'dddd0000-0000-0000-0000-000000000005' and type = 'meeting' and status = 'open';
+  assert n = 0, 'and takes its meeting off the queue';
+
+  select * into strict d from due_dates where client_id = 'dddd0000-0000-0000-0000-000000000006' and type = 'meeting';
+  assert d.snoozed_until is null, 'a booking whose day has passed is left alone';
 end $$;
 SQL
 }
@@ -240,12 +269,25 @@ end $$;
 SQL
 echo "0013 is safe to re-run"
 
-# The app saves the toggle as the signed-in user.
+# The app saves the toggle as the signed-in user. Check the value really
+# changed: a row-level policy could otherwise filter the update to nothing.
 run <<'SQL'
 set role authenticated;
-select set_config('test.uid', '00000000-0000-0000-0000-000000000001', false);
+select set_config('test.uid', '00000000-0000-0000-0000-000000000001', false) \g /dev/null
 update service_models set meetings_cover_calls = null where tier = 'B';
+do $$
+declare v int;
+begin
+  select meetings_cover_calls into v from service_models where tier = 'B';
+  assert v is null, 'authenticated turned B off';
+end $$;
 update service_models set meetings_cover_calls = 2 where tier = 'B';
+do $$
+declare v int;
+begin
+  select meetings_cover_calls into v from service_models where tier = 'B';
+  assert v = 2, 'authenticated turned B back on';
+end $$;
 reset role;
 SQL
 echo "authenticated can turn it off and on"

@@ -725,3 +725,30 @@ describe("demo adapter — the firm's own opportunity tags", () => {
     expect(reopened.clients.every((c) => c.mirrorTouches === true)).toBe(true);
   });
 });
+
+describe("demo adapter — data saved before meetings covered calls", () => {
+  it("turns the rule on and puts back bookings the old engine un-parked", async () => {
+    const storage = memoryStorage();
+    await createDemoAdapter(storage).load();
+    const today = todayISO();
+    const booked = addDays(today, 20);
+
+    // Rewind the stored snapshot to how an older build left it: no setting on
+    // the tiers, and a booked meeting whose parking was wiped by a recompute.
+    const saved = JSON.parse(storage.getItem("relationship-hub-demo-v1")!);
+    for (const m of saved.snapshot.serviceModels) delete m.meetingsCoverCalls;
+    const row = saved.snapshot.dueDates.find((d: { type: string }) => d.type === "meeting");
+    const client = saved.snapshot.clients.find((c: { id: string }) => c.id === row.clientId);
+    client.nextMeetingDate = booked;
+    row.snoozedUntil = null;
+    storage.setItem("relationship-hub-demo-v1", JSON.stringify(saved));
+
+    const snap = await createDemoAdapter(storage).load();
+    expect(snap.serviceModels.map((m) => m.meetingsCoverCalls)).toEqual([2, 2, 2, 2]);
+    const after = snap.dueDates.find((d) => d.clientId === client.id && d.type === "meeting")!;
+    expect(after.snoozedUntil).toBe(booked);
+    expect(
+      snap.tasks.some((t) => t.clientId === client.id && t.type === "meeting" && t.status === "open"),
+    ).toBe(false);
+  });
+});

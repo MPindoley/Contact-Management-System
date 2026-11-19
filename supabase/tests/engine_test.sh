@@ -685,6 +685,56 @@ begin
   assert d.due_date = current_date - 150 + 365, 'a backfilled meeting counts, got ' || d.due_date;
 end $$;
 
+-- The covering meetings must be within a year of each other. Tier A: met 600
+-- and 500 days ago, last call 530 days ago, so the calls were covered until
+-- 235 days ago and have been due since. Meeting them today must not rewrite
+-- that to "due since 135 days ago": today and 500 days ago aren't a year apart.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('cccc0000-0000-0000-0000-000000000006', 'Late Meeting', 'matt', 'A');
+insert into contact_events (client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-000000000006', 'matt', 'meeting', current_date - 600),
+  ('cccc0000-0000-0000-0000-000000000006', 'matt', 'meeting', current_date - 500),
+  ('cccc0000-0000-0000-0000-000000000006', 'matt', 'call',    current_date - 530);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000006' and type = 'call';
+  assert d.due_date = current_date - 235, 'covered until the older meeting turned a year, got ' || d.due_date;
+end $$;
+insert into contact_events (client_id, advisor, type, event_date)
+  values ('cccc0000-0000-0000-0000-000000000006', 'matt', 'meeting', current_date);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000006' and type = 'call';
+  assert d.due_date = current_date - 235, 'a late meeting keeps when the call fell due, got ' || d.due_date;
+end $$;
+-- Exactly a year apart is a day too many; a day less covers for one day.
+insert into clients (id, household_name, assigned_advisor, tier)
+  values ('cccc0000-0000-0000-0000-000000000007', 'Year Apart', 'matt', 'B');
+insert into contact_events (id, client_id, advisor, type, event_date) values
+  ('cccc0000-0000-0000-0000-0000000000e1', 'cccc0000-0000-0000-0000-000000000007', 'matt', 'meeting', current_date - 400),
+  ('cccc0000-0000-0000-0000-0000000000e2', 'cccc0000-0000-0000-0000-000000000007', 'matt', 'meeting', current_date - 35),
+  ('cccc0000-0000-0000-0000-0000000000e3', 'cccc0000-0000-0000-0000-000000000007', 'matt', 'call',    current_date - 200);
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000007' and type = 'call';
+  assert d.computed_from_event_id = 'cccc0000-0000-0000-0000-0000000000e3', '365 days apart covers nothing';
+end $$;
+update contact_events set event_date = current_date - 399 where id = 'cccc0000-0000-0000-0000-0000000000e1';
+do $$
+declare d record;
+begin
+  select * into strict d from due_dates
+    where client_id = 'cccc0000-0000-0000-0000-000000000007' and type = 'call';
+  assert d.computed_from_event_id = 'cccc0000-0000-0000-0000-0000000000e1', '364 days apart covers';
+  assert d.due_date = current_date - 34, 'for exactly one day, got ' || d.due_date;
+end $$;
+
 -- Snoozes. A booked meeting survives logging a call (it used to be wiped).
 insert into clients (id, household_name, assigned_advisor, tier)
   values ('cccc0000-0000-0000-0000-000000000005', 'Booked', 'matt', 'A');

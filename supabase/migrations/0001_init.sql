@@ -240,7 +240,7 @@ declare
   v_n         int;                     -- meetings_cover_calls; null = off
   v_lm_id     uuid; v_lm_date  date;   -- latest meeting
   v_lc_id     uuid; v_lc_date  date;   -- latest call
-  v_nth_id    uuid; v_nth_date date;   -- Nth most recent distinct meeting day
+  v_old_id    uuid; v_old_date date;   -- oldest meeting of the latest covering run
   v_cover_end date;                    -- the day the meetings stop covering the calls
   v_call_due  date; v_call_src uuid; v_call_covered boolean := false;
 begin
@@ -266,25 +266,29 @@ begin
    order by e.event_date desc, e.created_at desc, e.id desc
    limit 1;
 
-  -- Meetings cover the calls (callCover() in TypeScript): if the household's N
-  -- most recent meetings, on distinct days, are all within a year, the calls
-  -- are taken care of until the oldest of those N is a year old. A meeting
-  -- dated after the day it was logged (a CSV typo) never counts. 365 is
-  -- SCORE_WINDOW_DAYS, the same window the service score uses, so the call
+  -- Meetings cover the calls (callCover() in TypeScript): N meetings on
+  -- distinct days, within a year of each other, take care of the calls until
+  -- the oldest of them is a year old. The latest such run of N wins; usually
+  -- the N most recent, but not when those are more than a year apart. A
+  -- meeting dated after the day it was logged (a CSV typo) never counts. 365
+  -- is SCORE_WINDOW_DAYS, the same window the service score uses, so the call
   -- comes back onto the queue the same day the score stops crediting it.
   if v_n between 2 and 12 then
-    select x.id, x.event_date into v_nth_id, v_nth_date
-      from (select distinct on (e.event_date) e.id, e.event_date
-              from contact_events e
-             where e.client_id = p_client
-               and e.type = 'meeting'
-               and e.event_date <= (e.created_at at time zone 'utc')::date
-             order by e.event_date desc, e.created_at desc, e.id desc) x
-     order by x.event_date desc
-    offset v_n - 1
+    select w.id, w.event_date into v_old_id, v_old_date
+      from (select x.id, x.event_date,
+                   -- the newest day of the run of N that starts at this one
+                   lead(x.event_date, v_n - 1) over (order by x.event_date) as run_newest
+              from (select distinct on (e.event_date) e.id, e.event_date
+                      from contact_events e
+                     where e.client_id = p_client
+                       and e.type = 'meeting'
+                       and e.event_date <= (e.created_at at time zone 'utc')::date
+                     order by e.event_date desc, e.created_at desc, e.id desc) x) w
+     where w.event_date + 365 > w.run_newest
+     order by w.event_date desc
      limit 1;
-    if v_nth_id is not null then
-      v_cover_end := v_nth_date + 365;
+    if v_old_id is not null then
+      v_cover_end := v_old_date + 365;
     end if;
   end if;
 
@@ -294,7 +298,7 @@ begin
   -- never creates one.
   if v_lc_id is not null then
     if v_cover_end is not null and v_cover_end > v_lc_date + v_ci then
-      v_call_due := v_cover_end;       v_call_src := v_nth_id;  v_call_covered := true;
+      v_call_due := v_cover_end;       v_call_src := v_old_id;  v_call_covered := true;
     else
       v_call_due := v_lc_date + v_ci;  v_call_src := v_lc_id;
     end if;
