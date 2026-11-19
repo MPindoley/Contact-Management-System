@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../lib/store";
 import { useToast } from "../lib/toast";
-import { annualRequired } from "../engine/serviceEngine";
+import { DEFAULT_MEETINGS_COVER_CALLS, annualRequired } from "../engine/serviceEngine";
 import { planRetier } from "../engine/retier";
 import type { ClientTagDef, ServiceModel, User } from "../types";
 import { sortedTags } from "../types";
@@ -46,7 +46,22 @@ export function ServiceModels() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {data.serviceModels.map((model) => (
-          <ModelCard key={model.tier} model={model} />
+          // Keyed on what's stored, not just the tier: when the stored model
+          // changes underneath an open screen (a teammate's save arriving over
+          // realtime, or migration 0013 adding the setting), the card starts
+          // over from the new values instead of keeping stale ones that the
+          // next save would write back.
+          <ModelCard
+            key={[
+              model.tier,
+              model.meetingIntervalDays,
+              model.callIntervalDays,
+              String(model.meetingsCoverCalls),
+              model.minRevenue,
+              model.description,
+            ].join("|")}
+            model={model}
+          />
         ))}
       </div>
 
@@ -106,12 +121,18 @@ export function ServiceModels() {
 }
 
 function ModelCard({ model }: { model: ServiceModel }) {
-  const { updateServiceModel, busy } = useApp();
+  const { data, currentUser, updateServiceModel, busy, today } = useApp();
   const toast = useToast();
   const [meeting, setMeeting] = useState(String(model.meetingIntervalDays));
   const [call, setCall] = useState(String(model.callIntervalDays));
   const [minRevenue, setMinRevenue] = useState(model.minRevenue === null ? "" : String(model.minRevenue));
   const [description, setDescription] = useState(model.description ?? "");
+  // undefined = the database hasn't run migration 0013, so there's nothing to
+  // save it to yet.
+  const coverAvailable = model.meetingsCoverCalls !== undefined;
+  const coverWasOn = model.meetingsCoverCalls != null;
+  const coverCount = model.meetingsCoverCalls ?? DEFAULT_MEETINGS_COVER_CALLS;
+  const [cover, setCover] = useState(coverWasOn);
 
   const meetingNum = Number(meeting);
   const callNum = Number(call);
@@ -123,15 +144,39 @@ function ModelCard({ model }: { model: ServiceModel }) {
   const revValid = revNum === null || (Number.isFinite(revNum) && revNum >= 0);
   const valid = intervalsValid && revValid;
 
+  const coverChanged = coverAvailable && cover !== coverWasOn;
+
   const dirty =
     valid &&
     (meetingNum !== model.meetingIntervalDays ||
       callNum !== model.callIntervalDays ||
+      coverChanged ||
       revNum !== model.minRevenue ||
       (description.trim() || null) !== (model.description ?? null));
 
   const cadenceChanged =
-    meetingNum !== model.meetingIntervalDays || callNum !== model.callIntervalDays;
+    meetingNum !== model.meetingIntervalDays || callNum !== model.callIntervalDays || coverChanged;
+
+  // Turning it off: how many of this tier's households have their calls
+  // covered right now, and would get them back. A row still pointing at a
+  // meeting after its cover ran out is already back on the queue: not counted.
+  const turningOff = coverWasOn && !cover;
+  const uncovering = useMemo(() => {
+    if (!data || !turningOff) return 0;
+    const meetingIds = new Set(data.contactEvents.filter((e) => e.type === "meeting").map((e) => e.id));
+    const inTier = new Set(data.clients.filter((c) => c.active && c.tier === model.tier).map((c) => c.id));
+    return data.dueDates.filter(
+      (d) =>
+        d.type === "call" &&
+        d.dueDate > today &&
+        inTier.has(d.clientId) &&
+        d.computedFromEventId !== null &&
+        meetingIds.has(d.computedFromEventId),
+    ).length;
+  }, [data, turningOff, model.tier, today]);
+  // An advisor who only sees their own book can't count everyone else's, but
+  // the setting is firm-wide. (Same test as clientVisibleTo.)
+  const seesWholeFirm = Boolean(currentUser?.seesAllBooks);
 
   const preview = intervalsValid
     ? annualRequired({ ...model, meetingIntervalDays: meetingNum, callIntervalDays: callNum })
@@ -143,6 +188,7 @@ function ModelCard({ model }: { model: ServiceModel }) {
         tier: model.tier,
         meetingIntervalDays: meetingNum,
         callIntervalDays: callNum,
+        meetingsCoverCalls: coverAvailable ? (cover ? coverCount : null) : undefined,
         minRevenue: revNum,
         description: description.trim() || null,
       });
@@ -198,6 +244,34 @@ function ModelCard({ model }: { model: ServiceModel }) {
         <Field label="Meaningful call every (days)">
           <Input type="number" min={1} max={1095} value={call} onChange={(e) => setCall(e.target.value)} />
         </Field>
+        <label
+          className={`flex items-start gap-2.5 select-none ${coverAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+        >
+          <input
+            type="checkbox"
+            checked={cover}
+            disabled={!coverAvailable}
+            onChange={(e) => setCover(e.target.checked)}
+            className="mt-0.5 size-4 cursor-pointer accent-emerald-700 disabled:cursor-not-allowed"
+          />
+          <span className="text-[13px] leading-snug text-ink">
+            <span className="font-medium">
+              {coverCount === 2 ? "Two" : coverCount} meetings in 12 months cover the calls
+            </span>
+            <span className="block text-xs text-stone-400">
+              {coverAvailable
+                ? "No call is due until the older meeting is a year old."
+                : "Run migration 0013 to turn this on."}
+            </span>
+          </span>
+        </label>
+        {turningOff && (uncovering > 0 || !seesWholeFirm) && (
+          <p className="rounded-lg border border-gold-300 bg-gold-50 px-3 py-2 text-xs leading-snug text-gold-900">
+            {seesWholeFirm
+              ? `Saving brings back the calls for ${uncovering} Tier ${model.tier} ${uncovering === 1 ? "household" : "households"} whose meetings cover them now. Some may come back overdue.`
+              : `Saving brings back the calls that meetings are covering for Tier ${model.tier} households in every advisor's book, not just yours. Some may come back overdue.`}
+          </p>
+        )}
       </div>
 
       <p className="tnum mt-3 text-xs text-stone-400">

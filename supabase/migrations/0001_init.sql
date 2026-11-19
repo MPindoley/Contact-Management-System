@@ -102,6 +102,9 @@ create table service_models (
   call_interval_days    int not null check (call_interval_days between 1 and 1095),
   min_revenue           numeric,   -- tier criteria: AUM/revenue floor (editable)
   description           text,      -- what earns a household this tier
+  -- Meeting this many times (distinct days) in a trailing 12 months meets the
+  -- call requirement; null = off, calls always required. See callCover().
+  meetings_cover_calls  int check (meetings_cover_calls is null or meetings_cover_calls between 2 and 12),
   updated_at            timestamptz not null default now()
 );
 
@@ -225,66 +228,125 @@ language sql immutable as $$
   end
 $$;
 
--- Recompute a client's due dates from the latest meeting / meaningful call.
+-- Recompute a client's due dates from its meetings and calls.
 create or replace function fn_recompute_client_due_dates(p_client uuid) returns void
 language plpgsql security definer set search_path = public as $$
+-- The database twin of computeClientDueDates() in src/engine/serviceEngine.ts.
+-- Keep the two identical; supabase/tests/parity_test.sh checks that they are.
 declare
-  v_tier client_tier;
+  v_tier      client_tier;
+  v_mi        int;                     -- meeting interval (days)
+  v_ci        int;                     -- call interval (days)
+  v_n         int;                     -- meetings_cover_calls; null = off
+  v_lm_id     uuid; v_lm_date  date;   -- latest meeting
+  v_lc_id     uuid; v_lc_date  date;   -- latest call
+  v_old_id    uuid; v_old_date date;   -- oldest meeting of the latest covering run
+  v_cover_end date;                    -- the day the meetings stop covering the calls
+  v_call_due  date; v_call_src uuid; v_call_covered boolean := false;
 begin
-  select tier into v_tier from clients where id = p_client;
+  select c.tier, sm.meeting_interval_days, sm.call_interval_days, sm.meetings_cover_calls
+    into v_tier, v_mi, v_ci, v_n
+    from clients c join service_models sm on sm.tier = c.tier
+   where c.id = p_client;
   if v_tier is null then
     return;
   end if;
 
-  with latest as (
-    select distinct on (e.type)
-      e.type::text::touch_type as ttype,
-      e.event_date,
-      e.id as event_id
+  -- "The latest" everywhere means: by date, then by when it was logged, then
+  -- by id. The TypeScript twin is isLater().
+  select e.id, e.event_date into v_lm_id, v_lm_date
     from contact_events e
-    where e.client_id = p_client and e.type in ('meeting', 'call')
-    order by e.type, e.event_date desc, e.created_at desc
-  )
-  insert into due_dates (client_id, type, due_date, computed_from_event_id, updated_at)
-  select
-    p_client,
-    l.ttype,
-    l.event_date + case l.ttype
-      when 'meeting' then sm.meeting_interval_days
-      else                sm.call_interval_days
-    end,
-    l.event_id,
-    now()
-  from latest l
-  join service_models sm on sm.tier = v_tier
-  on conflict (client_id, type) do update
-    set due_date               = excluded.due_date,
-        computed_from_event_id = excluded.computed_from_event_id,
-        snoozed_until          = null,  -- a fresh contact clears any snooze
-        updated_at             = now();
+   where e.client_id = p_client and e.type = 'meeting'
+   order by e.event_date desc, e.created_at desc, e.id desc
+   limit 1;
 
-  -- Prune computed due dates whose source event is gone (e.g. event deleted).
-  -- First-outreach placeholders (computed_from_event_id is null) are left
-  -- alone here so they survive recomputes until a real contact happens.
-  delete from due_dates d
-  where d.client_id = p_client
-    and d.computed_from_event_id is not null
-    and not exists (
-      select 1 from contact_events e
-      where e.client_id = p_client
-        and e.type in ('meeting', 'call')
-        and e.type::text = d.type::text
-    );
+  select e.id, e.event_date into v_lc_id, v_lc_date
+    from contact_events e
+   where e.client_id = p_client and e.type = 'call'
+   order by e.event_date desc, e.created_at desc, e.id desc
+   limit 1;
 
-  -- Clear first-outreach placeholders once the client has any real contact —
-  -- the normal cadence (above) has taken over from here.
+  -- Meetings cover the calls (callCover() in TypeScript): N meetings on
+  -- distinct days, within a year of each other, take care of the calls until
+  -- the oldest of them is a year old. The latest such run of N wins; usually
+  -- the N most recent, but not when those are more than a year apart. A
+  -- meeting dated after the day it was logged (a CSV typo) never counts. 365
+  -- is SCORE_WINDOW_DAYS, the same window the service score uses, so the call
+  -- comes back onto the queue the same day the score stops crediting it.
+  if v_n between 2 and 12 then
+    select w.id, w.event_date into v_old_id, v_old_date
+      from (select x.id, x.event_date,
+                   -- the newest day of the run of N that starts at this one
+                   lead(x.event_date, v_n - 1) over (order by x.event_date) as run_newest
+              from (select distinct on (e.event_date) e.id, e.event_date
+                      from contact_events e
+                     where e.client_id = p_client
+                       and e.type = 'meeting'
+                       and e.event_date <= (e.created_at at time zone 'utc')::date
+                     order by e.event_date desc, e.created_at desc, e.id desc) x) w
+     where w.event_date + 365 > w.run_newest
+     order by w.event_date desc
+     limit 1;
+    if v_old_id is not null then
+      v_cover_end := v_old_date + 365;
+    end if;
+  end if;
+
+  -- The call: last call + call interval, pushed back to the cover's end if the
+  -- cover reaches further. A tie goes to the call. With no call ever logged
+  -- there is no call row at all: the rule only ever pushes a call later, it
+  -- never creates one.
+  if v_lc_id is not null then
+    if v_cover_end is not null and v_cover_end > v_lc_date + v_ci then
+      v_call_due := v_cover_end;       v_call_src := v_old_id;  v_call_covered := true;
+    else
+      v_call_due := v_lc_date + v_ci;  v_call_src := v_lc_id;
+    end if;
+  end if;
+
+  -- A snooze (a voicemail's "try again", a booked meeting) survives a
+  -- recompute that doesn't change where the row comes from. So logging a call
+  -- no longer un-books the booked meeting, and a tier edit no longer un-parks
+  -- the whole book. A fresh contact of the row's own type still clears it.
+  if v_lm_id is not null then
+    insert into due_dates as d (client_id, type, due_date, computed_from_event_id, updated_at)
+    values (p_client, 'meeting', v_lm_date + v_mi, v_lm_id, now())
+    on conflict (client_id, type) do update
+      set due_date               = excluded.due_date,
+          snoozed_until          = case when d.computed_from_event_id is not distinct from excluded.computed_from_event_id
+                                        then d.snoozed_until else null end,
+          computed_from_event_id = excluded.computed_from_event_id,
+          updated_at             = now();
+  end if;
+
+  if v_call_src is not null then
+    insert into due_dates as d (client_id, type, due_date, computed_from_event_id, updated_at)
+    values (p_client, 'call', v_call_due, v_call_src, now())
+    on conflict (client_id, type) do update
+      set due_date               = excluded.due_date,
+          -- A call row moving onto its cover keeps its snooze too: that only
+          -- happens when the call was pushed later, so it is harmless.
+          snoozed_until          = case when v_call_covered
+                                          or d.computed_from_event_id is not distinct from excluded.computed_from_event_id
+                                        then d.snoozed_until else null end,
+          computed_from_event_id = excluded.computed_from_event_id,
+          updated_at             = now();
+  end if;
+
+  -- Drop event-derived rows this pass did not produce. (0002 checked for an
+  -- event of the row's own type, which would delete a call row whose source is
+  -- a covering meeting.)
   delete from due_dates d
-  where d.client_id = p_client
-    and d.computed_from_event_id is null
-    and exists (
-      select 1 from contact_events e
-      where e.client_id = p_client and e.type in ('meeting', 'call')
-    );
+   where d.client_id = p_client
+     and d.computed_from_event_id is not null
+     and ((d.type = 'meeting' and v_lm_id is null) or (d.type = 'call' and v_call_src is null));
+
+  -- First-outreach placeholders give way once the client has any real contact.
+  delete from due_dates d
+   where d.client_id = p_client
+     and d.computed_from_event_id is null
+     and exists (select 1 from contact_events e
+                  where e.client_id = p_client and e.type in ('meeting', 'call'));
 end $$;
 
 -- Rebuild one client's open tasks from its due dates.
@@ -568,6 +630,12 @@ create policy "scoped prospect events" on prospect_events for all to authenticat
 
 -- Base table privileges (the policies above still decide which rows are visible).
 grant select, insert, update, delete on all tables in schema public to authenticated;
+-- "all tables" means the ones that exist right now, so a table added by a later
+-- migration would not be covered and every query against it would fail with
+-- "permission denied" before RLS was ever consulted. Default privileges apply
+-- to tables created after this line, which closes that gap for good.
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
 grant execute on function app_sees_all(), app_is_assistant(), app_advisor_key() to authenticated;
 grant execute on function fn_prune_empty_families() to authenticated;
 
@@ -588,11 +656,11 @@ end $$;
 -- Seed data — the rules and the people. No demo clients here: a real backend
 -- starts clean and Phase 1 clients are entered by hand in the app.
 -- ============================================================================
-insert into service_models (tier, meeting_interval_days, call_interval_days, min_revenue, description) values
-  ('S',  90,  30, 250000, 'Your very top households — protect these above all.'),
-  ('A',  90,  30, 100000, 'Core high-value households.'),
-  ('B', 365,  90,  25000, 'The steady middle of the book.'),
-  ('C', 365, 180,   null, 'Lighter-touch relationships, kept warm.');
+insert into service_models (tier, meeting_interval_days, call_interval_days, min_revenue, description, meetings_cover_calls) values
+  ('S',  90,  30, 250000, 'Your very top households — protect these above all.', 2),
+  ('A',  90,  30, 100000, 'Core high-value households.',                         2),
+  ('B', 365,  90,  25000, 'The steady middle of the book.',                      2),
+  ('C', 365, 180,   null, 'Lighter-touch relationships, kept warm.',             2);
 
 insert into client_tags (id, label, keywords, sort_order) values
   ('roth_conversion', 'Roth Conversion',

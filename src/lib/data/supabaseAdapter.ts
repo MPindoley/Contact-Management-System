@@ -136,6 +136,8 @@ interface ServiceModelRow {
   call_interval_days: number;
   min_revenue: number | null;
   description: string | null;
+  /** Absent until migration 0013 has run. */
+  meetings_cover_calls?: number | null;
 }
 interface ContactEventRow {
   id: string;
@@ -214,6 +216,9 @@ const mapModel = (r: ServiceModelRow): ServiceModel => ({
   callIntervalDays: r.call_interval_days,
   minRevenue: r.min_revenue,
   description: r.description,
+  // undefined (not null) when the column is missing, so the Tiers screen can
+  // tell "turned off" apart from "migration 0013 not run yet".
+  meetingsCoverCalls: "meetings_cover_calls" in r ? (r.meetings_cover_calls ?? null) : undefined,
 });
 const mapEvent = (r: ContactEventRow): ContactEvent => ({
   id: r.id,
@@ -741,15 +746,16 @@ export function createSupabaseAdapter(): DataAdapter {
 
     async updateServiceModel(model: ServiceModel) {
       // The service_models trigger recomputes every due date and task.
-      const { error } = await db
-        .from("service_models")
-        .update({
-          meeting_interval_days: model.meetingIntervalDays,
-          call_interval_days: model.callIntervalDays,
-          min_revenue: model.minRevenue,
-          description: model.description?.trim() || null,
-        })
-        .eq("tier", model.tier);
+      const patch: Partial<ServiceModelRow> = {
+        meeting_interval_days: model.meetingIntervalDays,
+        call_interval_days: model.callIntervalDays,
+        min_revenue: model.minRevenue,
+        description: model.description?.trim() || null,
+      };
+      // Only send the column when the app knows it exists: writing it to a
+      // database that hasn't run 0013 would fail the whole save.
+      if (model.meetingsCoverCalls !== undefined) patch.meetings_cover_calls = model.meetingsCoverCalls;
+      const { error } = await db.from("service_models").update(patch).eq("tier", model.tier);
       if (error) throw new Error(`Updating service model: ${error.message}`);
       return fetchSnapshot();
     },

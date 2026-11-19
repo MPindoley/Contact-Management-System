@@ -206,6 +206,14 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
       alsoForClientIds.length > 0
         ? ` for ${coveredCount} households`
         : ` for ${selected.householdName}`;
+    // Were this household's calls already covered by its meetings? Read before
+    // logging, so the toast can say when this meeting is the one that starts it.
+    const callEventIds = new Set(
+      (data?.contactEvents ?? []).filter((e) => e.clientId === selected.id && e.type === "call").map((e) => e.id),
+    );
+    const callRowBefore = data?.dueDates.find((d) => d.clientId === selected.id && d.type === "call");
+    const coveredBefore =
+      !!callRowBefore?.computedFromEventId && !callEventIds.has(callRowBefore.computedFromEventId);
     try {
       const dueDates = await logContact({
         clientId: selected.id,
@@ -234,10 +242,22 @@ function LogContactForm({ initialClientId, onClose }: { initialClientId: string 
         toast.push(`Admin touch logged${covering} — service clock unchanged.`, "info");
       } else {
         const next = dueDates.find((d) => d.type === type);
+        // A meeting can't be the source of a call row unless its meetings now
+        // cover the calls; say so only when this meeting is what started it.
+        const callRow = dueDates.find((d) => d.type === "call");
+        const coverStarts =
+          type === "meeting" &&
+          !coveredBefore &&
+          !!callRow?.computedFromEventId &&
+          !callEventIds.has(callRow.computedFromEventId) &&
+          // A backdated meeting can complete a cover that has already run
+          // out; that's history, not news.
+          callRow.dueDate > today;
         toast.push(
-          next
+          (next
             ? `${CONTACT_TYPE_LABELS[type]} logged${covering} — next ${type} for ${selected.householdName} due ${formatMedium(next.dueDate)}.`
-            : `${CONTACT_TYPE_LABELS[type]} logged${covering}.`,
+            : `${CONTACT_TYPE_LABELS[type]} logged${covering}.`) +
+            (coverStarts ? ` Calls are covered until ${formatMedium(callRow!.dueDate)}.` : ""),
         );
       }
 

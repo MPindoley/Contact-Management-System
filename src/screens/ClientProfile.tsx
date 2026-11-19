@@ -270,6 +270,7 @@ export function ClientProfile() {
                   label="Calls"
                   completed={derived.score.completedCalls}
                   required={derived.score.requiredCalls}
+                  covered={derived.score.callsCovered}
                 />
               </div>
             </div>
@@ -319,7 +320,7 @@ function DueCard({
   /** A booked meeting parks this touch — say so rather than "snoozed". */
   bookedFor?: string | null;
   voicemailsSince?: number;
-  eventsById: Map<string, { eventDate: string }>;
+  eventsById: Map<string, Pick<ContactEvent, "eventDate" | "type">>;
   today: string;
   active: boolean;
 }) {
@@ -327,6 +328,9 @@ function DueCard({
   const Icon = type === "meeting" ? CalendarIcon : PhoneIcon;
   const tone = type === "meeting" ? "text-pine-700 bg-pine-50" : "text-sky-700 bg-sky-50";
   const source = basedOn ? eventsById.get(basedOn) : null;
+  // A call row that comes from a meeting: two meetings in 12 months are
+  // covering the calls, and this is the day that stops.
+  const coveredByMeetings = type === "call" && source?.type === "meeting";
   const isSnoozed = snoozedUntil !== null && snoozedUntil > today;
   // The parking came from a booked meeting, not someone hitting snooze.
   const isBooked = isSnoozed && bookedFor !== null && bookedFor === snoozedUntil;
@@ -347,7 +351,11 @@ function DueCard({
           <p className="font-display text-2xl font-semibold tracking-tight">{formatMedium(due)}</p>
           <div className="mt-1 flex items-center gap-2">
             <DuePhrase dueDate={due} today={today} />
-            {source ? (
+            {coveredByMeetings ? (
+              <span className="text-xs text-stone-400">
+                {due > today ? "· covered by your meetings" : "· meetings no longer cover it"}
+              </span>
+            ) : source ? (
               <span className="text-xs text-stone-400">
                 · from the one on {formatShort(source.eventDate)}
               </span>
@@ -394,8 +402,19 @@ function DueCard({
   );
 }
 
-function BreakdownRow({ label, completed, required }: { label: string; completed: number; required: number }) {
-  const capped = Math.min(completed, required);
+function BreakdownRow({
+  label,
+  completed,
+  required,
+  covered = false,
+}: {
+  label: string;
+  completed: number;
+  required: number;
+  /** Two meetings in 12 months: the calls count as done. */
+  covered?: boolean;
+}) {
+  const capped = covered ? required : Math.min(completed, required);
   const pct = required === 0 ? 0 : Math.round((capped / required) * 100);
   const barColor = pct >= 100 ? "bg-pine-500" : pct >= 50 ? "bg-amber-400" : "bg-clay-500";
   return (
@@ -403,7 +422,7 @@ function BreakdownRow({ label, completed, required }: { label: string; completed
       <div className="flex items-baseline justify-between text-[13px]">
         <span className="font-medium">{label}</span>
         <span className="tnum text-ink-soft">
-          {completed}/{required}
+          {covered ? "covered by meetings" : `${completed}/${required}`}
         </span>
       </div>
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-200/70">

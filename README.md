@@ -67,11 +67,18 @@ matter who writes to it, and once as **pure TypeScript**
 (`src/engine/serviceEngine.ts`, fully unit-tested) powering demo mode. Keep
 them in sync if you change the rules.
 
-Two design decisions worth knowing:
+Three design decisions worth knowing:
 
 - **Meeting and call clocks are independent.** A meeting resets the meeting
   clock only. That's what makes Tier A ≈ 4 meetings + 12 calls = 16
   touches/year, and it matches the score formula.
+- **Two meetings in 12 months cover the calls.** The calls are there to keep
+  in touch between meetings, so a household met on two different days in the
+  last year has its calls covered: the next call isn't due until the older of
+  those two meetings is a year old, and the score counts its calls as done.
+  If the meetings slip, the call comes back on its own. On for every tier;
+  each tier can turn it off on the Tiers screen. It only ever moves a call
+  later: a household that has never had a call logged still gets none.
 - **Admin touches never reset the clock** and never count toward scores.
   They're recorded for the history, nothing more.
 
@@ -94,7 +101,8 @@ floor and description. Those floors feed the CSV importer's auto-tiering, so
 ### The service score
 
 `contacts completed on schedule ÷ contacts required`, trailing 12 months,
-capped per channel (eight calls never excuse a missed annual meeting).
+capped per channel (eight calls never excuse a missed annual meeting). When
+two meetings cover the calls, the calls count as met.
 Requirements prorate for recently added households. Rolled up by advisor and
 firm, weighted by required contacts — so a neglected Tier A household moves
 the needle more than a quiet Tier C one. Green ≥ 90, yellow ≥ 70, red below.

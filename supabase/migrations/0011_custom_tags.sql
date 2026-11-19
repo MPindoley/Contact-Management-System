@@ -57,6 +57,15 @@ on conflict (id) do nothing;
 
 -- Firm-wide config, same access as service_models: everyone signed in can read
 -- and edit it. A tag is a label, not client data, so it crosses no book.
+--
+-- The grant and the policy are two separate gates and both must pass: the
+-- grant decides whether the role may touch the table at all, the policy
+-- decides which rows. 0001's `grant ... on all tables in schema public` only
+-- covered the tables that existed when it ran, so a table added here needs its
+-- own grant. (0012 repeats it for databases that ran this file before the
+-- grant was added.)
+grant select, insert, update, delete on client_tags to authenticated;
+
 alter table client_tags enable row level security;
 drop policy if exists "authenticated all client tags" on client_tags;
 create policy "authenticated all client tags" on client_tags

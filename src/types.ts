@@ -115,6 +115,15 @@ export interface ServiceModel {
   /** The criteria that define this tier — editable as the book grows. */
   minRevenue: number | null;
   description: string | null;
+  /**
+   * Meeting this many times (distinct days) in a trailing 12 months counts as
+   * the call requirement being met. null = off: calls are always required.
+   *
+   * undefined means the database predates the column (migration 0013 not run
+   * yet). The engine treats that as off, and the adapter never writes it, so
+   * the app keeps working in either deploy order.
+   */
+  meetingsCoverCalls?: number | null;
 }
 
 export interface ContactEvent {

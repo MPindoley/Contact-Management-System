@@ -33,6 +33,7 @@ export function MeetingPrep() {
       .filter((e) => e.clientId === client.id)
       .sort((a, b) => b.eventDate.localeCompare(a.eventDate) || b.createdAt.localeCompare(a.createdAt));
     const dueDates = data.dueDates.filter((d) => d.clientId === client.id);
+    const callDue = dueDates.find((d) => d.type === "call") ?? null;
     const family = client.familyId
       ? data.clients.filter((c) => c.familyId === client.familyId)
       : [];
@@ -41,7 +42,12 @@ export function MeetingPrep() {
       model: modelFor(data.serviceModels, client.tier),
       score: clientScore(client, data.contactEvents, data.serviceModels, today),
       meetingDue: dueDates.find((d) => d.type === "meeting") ?? null,
-      callDue: dueDates.find((d) => d.type === "call") ?? null,
+      callDue,
+      // Two meetings in 12 months are covering the calls until callDue.
+      callCovered:
+        callDue !== null &&
+        callDue.dueDate > today &&
+        events.some((e) => e.id === callDue.computedFromEventId && e.type === "meeting"),
       // The last year of touches, most recent first — this is where the
       // "what did I promise last time" answer actually lives.
       recent: events.filter((e) => e.eventDate > addDays(today, -365)).slice(0, 12),
@@ -149,6 +155,9 @@ export function MeetingPrep() {
               {prep.callDue ? formatMedium(prep.callDue.dueDate) : "—"}
             </p>
             {prep.callDue && <DuePhrase dueDate={prep.callDue.dueDate} today={today} />}
+            {prep.callCovered && (
+              <p className="mt-0.5 text-xs text-stone-400">Covered by your meetings until then</p>
+            )}
           </div>
         </div>
       </section>

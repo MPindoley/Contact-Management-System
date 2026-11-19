@@ -14,8 +14,9 @@ Open **SQL Editor** in the Supabase dashboard, paste the contents of
 [`migrations/0001_init.sql`](migrations/0001_init.sql), and run it.
 (Or, with the Supabase CLI linked to your project: `supabase db push`.)
 
-This creates the six tables, the service-engine triggers, the tier rules
-(A: 90/30, B: 365/90, C: 365/180), and the three user profiles.
+This creates the tables, the service-engine triggers, the tier rules
+(S and A: 90/30, B: 365/90, C: 365/180, and on every tier two meetings in 12
+months cover the calls), and the three user profiles.
 
 ### Already set up? Run the upgrades instead
 
@@ -23,7 +24,9 @@ If your database already has the original schema (and data), **don't** re-run
 `0001_init.sql` — it uses `create table` and would error. Instead apply the
 incremental upgrade files **in order**, in the SQL editor. Each is idempotent
 (safe to re-run), so when you get a newer build just run the ones you haven't
-yet:
+yet. Don't go back and re-run an older file after a newer one, though: it can
+put back what the newer one replaced (re-running 0002 after 0013, for example,
+restores the old due-date engine).
 
 | File | Adds |
 | --- | --- |
@@ -31,6 +34,14 @@ yet:
 | [`0003_tiers_held_away.sql`](migrations/0003_tiers_held_away.sql) | the **S** tier, editable tier criteria, held-away "money to capture" flag — **two steps** (run STEP 1, then STEP 2; Postgres won't use a new enum value in the batch that adds it) |
 | [`0004_revenue_families.sql`](migrations/0004_revenue_families.sql) | persisted AUM/revenue + family linking (single step) |
 | [`0005_per_advisor_privacy.sql`](migrations/0005_per_advisor_privacy.sql) | **per-advisor privacy** — row-level security so each advisor's clients and prospects are private (single step) |
+| [`0006_assistant_author.sql`](migrations/0006_assistant_author.sql) | the assistant can log contacts under her own name |
+| [`0007_client_tags.sql`](migrations/0007_client_tags.sql) | opportunity tags on households |
+| [`0008_scheduled_meetings.sql`](migrations/0008_scheduled_meetings.sql) | book an upcoming meeting on a household |
+| [`0009_household_touches.sql`](migrations/0009_household_touches.sql) | one conversation logged for the whole household |
+| [`0010_mirror_touches.sql`](migrations/0010_mirror_touches.sql) | choose which household members mirror a touch |
+| [`0011_custom_tags.sql`](migrations/0011_custom_tags.sql) | the firm adds and edits its own opportunity tags |
+| [`0012_client_tags_grants.sql`](migrations/0012_client_tags_grants.sql) | fixes "permission denied for table client_tags" when adding a tag |
+| [`0013_meetings_cover_calls.sql`](migrations/0013_meetings_cover_calls.sql) | **two meetings in 12 months cover the calls**, per tier (on for every tier; turn it off on the Tiers screen). Also stops logging a call from un-booking a booked meeting |
 
 After **0005**, confirm who sees everything. The senior advisor and the
 assistant should have `sees_all_books = true`; everyone else `false`. The
